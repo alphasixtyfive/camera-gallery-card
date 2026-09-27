@@ -1,0 +1,17 @@
+{
+  "name": "camera-gallery-card",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A Home Assistant camera wall and switchable full-screen viewer",
+  "scripts": {
+    "test": "node --check camera-gallery-card.js && node test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.0.0"
+  },
+  "license": "MIT"
+}
