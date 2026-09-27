@@ -120,12 +120,12 @@ const styles = `
   .action, .switcher { padding: 0 12px; color: var(--primary-color); }
   .switcher { display: none; }
   .close:hover, .action:hover, .switcher:hover { background: var(--secondary-background-color, rgba(127,127,127,.12)); }
-  .content { position: relative; display: grid; grid-template-columns: minmax(0,1fr) clamp(280px, 20vw, 340px); flex: 1; min-height: 0; }
+  .content { position: relative; display: grid; grid-template-columns: minmax(0,1fr) clamp(280px, 20vw, 340px); flex: 1; min-height: 0; overflow: clip; }
   .stage { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; background: var(--primary-background-color, #fafafa); }
   .viewer { width: min(100%, 160vh); max-height: 100%; }
   .viewer > * { display: block; width: 100%; }
   .viewer[data-native] { width: 100%; height: 100%; max-height: none; }
-  .viewer[data-native] > * { height: 100%; }
+  .viewer[data-native] > * { height: 100%; --ha-card-border-radius: 0px; }
   .viewer-message { color: var(--secondary-text-color); text-align: center; }
   .swipe-preview { position: absolute; inset: 0; display: grid; place-items: center; visibility: hidden; pointer-events: none; background: var(--primary-background-color, #fafafa); }
   .swipe-preview img { width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
@@ -489,8 +489,6 @@ class CameraGalleryCard extends HTMLElement {
   _setDrawerOpen(open, focus = true) {
     this._resetSwipe();
     this._dialog.toggleAttribute("data-drawer-open", open);
-    // A tap during the drawer animation can scroll the clipped dialog.
-    this._dialog.scrollTop = 0;
     this._switcher.setAttribute("aria-expanded", String(open));
     this._switcher.setAttribute("aria-label", open ? "Hide cameras" : "Show cameras");
     if (!focus || !this._dialog.open) return;
