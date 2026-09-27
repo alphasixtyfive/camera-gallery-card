@@ -50,7 +50,7 @@ function normalizeConfig(config) {
   if (config.show_gallery_groups !== undefined && typeof config.show_gallery_groups !== "boolean") {
     throw new Error("camera-gallery-card: show_gallery_groups must be true or false");
   }
-  return { cameras, exclude, columns, fitMode: config.fit_mode || "cover", showGalleryGroups: config.show_gallery_groups || false };
+  return { cameras, exclude, columns, fitMode: config.fit_mode, showGalleryGroups: config.show_gallery_groups || false };
 }
 
 function cameraEntries(config, states) {
@@ -160,6 +160,7 @@ const styles = `
     dialog[data-drawer-open] .side { transform: translateY(0); visibility: visible; transition: transform .2s ease; }
     .side h3 { margin: 0 12px 6px; }
   }
+  @media (max-width: 600px) { :host { --gallery-dialog-inline-inset: 4px; } }
   @media (max-width: 720px) { .gallery { grid-template-columns: repeat(min(2, var(--gallery-columns)), minmax(0, 1fr)); } }
   @media (max-width: 410px) { .action .label, .switcher .label { display: none; } .action, .switcher { width: 44px; padding: 0; } }
   @media (prefers-reduced-motion: reduce) { .side, dialog[data-drawer-open] .side, .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: none; } }
@@ -349,7 +350,7 @@ class CameraGalleryCard extends HTMLElement {
         const card = helpers.createCardElement({
           type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
           camera_view: entry.preview_view || "auto", aspect_ratio: entry.aspect_ratio || "16:9",
-          fit_mode: entry.fit_mode || this._config.fitMode,
+          fit_mode: entry.fit_mode || this._config.fitMode || "cover",
           tap_action: { action: "none" }, hold_action: { action: "none" }, double_tap_action: { action: "none" }
         });
         if (this._hass) card.hass = this._hass;
@@ -413,7 +414,7 @@ class CameraGalleryCard extends HTMLElement {
       if (!adjacent) return;
       start.direction = direction;
       start.adjacent = adjacent.entity;
-      this._swipePreview.dataset.fit = adjacent.fit_mode || this._config.fitMode;
+      this._swipePreview.dataset.fit = this._viewerFitMode(adjacent);
       this._swipePreview.removeAttribute("data-image-ready");
       this._swipePreview.querySelector(".name").textContent = this._name(adjacent);
       const picture = this._hass?.states?.[adjacent.entity]?.attributes?.entity_picture;
@@ -590,11 +591,18 @@ class CameraGalleryCard extends HTMLElement {
     return width > 0 && height > 0 ? `${Math.round(width)}:${Math.round(height)}` : "16:9";
   }
 
+  _viewerFitMode(entry) {
+    return entry.fit_mode || this._config.fitMode || (window.matchMedia("(max-width: 900px)").matches ? "contain" : "cover");
+  }
+
   _syncViewerSize() {
     if (!this._activeConfig || !this._activeCard?.setConfig) return;
     const aspect_ratio = this._viewerRatio();
-    if (aspect_ratio === this._activeConfig.aspect_ratio) return;
-    this._activeConfig = { ...this._activeConfig, aspect_ratio };
+    const entry = this._entries.find((item) => item.entity === this._selected);
+    if (!entry) return;
+    const fit_mode = this._viewerFitMode(entry);
+    if (aspect_ratio === this._activeConfig.aspect_ratio && fit_mode === this._activeConfig.fit_mode) return;
+    this._activeConfig = { ...this._activeConfig, aspect_ratio, fit_mode };
     this._activeCard.setConfig(this._activeConfig);
   }
 
@@ -617,7 +625,7 @@ class CameraGalleryCard extends HTMLElement {
       const cardConfig = entry.viewer || {
         type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
         camera_view: entry.viewer_view || "live", aspect_ratio: this._viewerRatio(),
-        fit_mode: entry.fit_mode || this._config.fitMode, tap_action: { action: "none" }
+        fit_mode: this._viewerFitMode(entry), tap_action: { action: "none" }
       };
       const card = helpers.createCardElement(cardConfig);
       if (this._hass) card.hass = this._hass;
