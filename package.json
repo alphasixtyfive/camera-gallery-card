@@ -1,9 +1,9 @@
 {
   "name": "camera-gallery-card",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "A Home Assistant camera wall and switchable maximized viewer",
+  "description": "Native Home Assistant camera previews with a switchable large viewer",
   "scripts": {
     "test": "node --check camera-gallery-card.js && node test.mjs"
   },

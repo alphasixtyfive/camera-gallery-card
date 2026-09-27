@@ -2,96 +2,60 @@ const CAMERA_ID = /^camera\.[a-z0-9_]+$/;
 const FIT_MODES = new Set(["cover", "contain", "fill"]);
 
 function normalizeConfig(config) {
-  if (!config || (config.cameras !== "all" && !Array.isArray(config.cameras))) {
-    throw new Error("camera-gallery-card: set cameras to an entity list or 'all'");
-  }
-  if (Array.isArray(config.cameras) && !config.cameras.length) {
-    throw new Error("camera-gallery-card: cameras cannot be empty");
-  }
-  if (config.exclude !== undefined && !Array.isArray(config.exclude)) {
-    throw new Error("camera-gallery-card: exclude must be a list");
-  }
+  if (!config?.card?.type) throw new Error("camera-gallery-card: card needs a native card type");
   if (config.fit_mode !== undefined && !FIT_MODES.has(config.fit_mode)) {
     throw new Error("camera-gallery-card: fit_mode must be cover, contain, or fill");
   }
-  const exclude = new Set(config.exclude || []);
-  for (const id of exclude) {
-    if (!CAMERA_ID.test(id)) throw new Error(`camera-gallery-card: invalid excluded camera ${id}`);
+  const options = config.camera_options || {};
+  if (typeof options !== "object" || Array.isArray(options)) {
+    throw new Error("camera-gallery-card: camera_options must be a map");
   }
-  const cameras = config.cameras === "all" ? "all" : config.cameras.map((camera) => {
-    const entry = typeof camera === "string" ? { entity: camera } : camera;
-    if (!entry || !CAMERA_ID.test(entry.entity)) {
-      throw new Error(`camera-gallery-card: invalid camera ${String(entry?.entity || camera)}`);
+  const entities = [];
+  const seen = new Set();
+  function collect(card) {
+    if (card?.type === "picture-entity" && CAMERA_ID.test(card.entity || "")) {
+      if (seen.has(card.entity)) throw new Error(`camera-gallery-card: duplicate camera ${card.entity}`);
+      if (card.tap_action && card.tap_action.action !== "more-info") {
+        throw new Error(`camera-gallery-card: ${card.entity} tap action must be more-info`);
+      }
+      seen.add(card.entity);
+      entities.push(card.entity);
+    }
+    for (const child of card?.cards || []) collect(child);
+  }
+  collect(config.card);
+  if (!entities.length) throw new Error("camera-gallery-card: card needs picture-entity cameras");
+  for (const [entity, entry] of Object.entries(options)) {
+    if (!seen.has(entity)) throw new Error(`camera-gallery-card: camera_options has unknown camera ${entity}`);
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`camera-gallery-card: options for ${entity} need a map`);
     }
     if (entry.viewer && (typeof entry.viewer !== "object" || !entry.viewer.type)) {
-      throw new Error(`camera-gallery-card: viewer for ${entry.entity} needs a card type`);
+      throw new Error(`camera-gallery-card: viewer for ${entity} needs a card type`);
     }
     if (entry.name !== undefined && (typeof entry.name !== "string" || !entry.name.trim())) {
-      throw new Error(`camera-gallery-card: name for ${entry.entity} needs text`);
+      throw new Error(`camera-gallery-card: name for ${entity} needs text`);
     }
     if (entry.icon !== undefined && (typeof entry.icon !== "string" || !entry.icon.trim())) {
-      throw new Error(`camera-gallery-card: icon for ${entry.entity} needs a name`);
+      throw new Error(`camera-gallery-card: icon for ${entity} needs a name`);
     }
     if (entry.fit_mode !== undefined && !FIT_MODES.has(entry.fit_mode)) {
-      throw new Error(`camera-gallery-card: fit_mode for ${entry.entity} must be cover, contain, or fill`);
+      throw new Error(`camera-gallery-card: fit_mode for ${entity} must be cover, contain, or fill`);
     }
     if (entry.group !== undefined && (typeof entry.group !== "string" || !entry.group.trim())) {
-      throw new Error(`camera-gallery-card: group for ${entry.entity} needs a name`);
+      throw new Error(`camera-gallery-card: group for ${entity} needs a name`);
     }
     if (entry.action && (!entry.action.label || typeof entry.action.path !== "string" || !/^\/(?!\/)/.test(entry.action.path))) {
-      throw new Error(`camera-gallery-card: action for ${entry.entity} needs a local path and label`);
+      throw new Error(`camera-gallery-card: action for ${entity} needs a local path and label`);
     }
-    return { ...entry };
-  });
-  const columns = Number(config.columns ?? 5);
-  if (!Number.isInteger(columns) || columns < 1 || columns > 8) {
-    throw new Error("camera-gallery-card: columns must be between 1 and 8");
   }
-  if (config.show_gallery_groups !== undefined && typeof config.show_gallery_groups !== "boolean") {
-    throw new Error("camera-gallery-card: show_gallery_groups must be true or false");
-  }
-  return { cameras, exclude, columns, fitMode: config.fit_mode, showGalleryGroups: config.show_gallery_groups || false };
-}
-
-function cameraEntries(config, states) {
-  const source = config.cameras === "all"
-    ? Object.keys(states || {}).filter((id) => CAMERA_ID.test(id)).sort((a, b) => {
-      const nameA = states[a]?.attributes?.friendly_name || a;
-      const nameB = states[b]?.attributes?.friendly_name || b;
-      return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: "base" }) || a.localeCompare(b);
-    }).map((entity) => ({ entity }))
-    : config.cameras;
-  const seen = new Set();
-  const entries = [];
-  let group;
-  for (const entry of source) {
-    if (entry.group) group = entry.group;
-    if (config.exclude.has(entry.entity) || seen.has(entry.entity)) continue;
-    seen.add(entry.entity);
-    entries.push(group ? { ...entry, group } : entry);
-    group = undefined;
-  }
-  return entries;
-}
-
-function frameRatio(value) {
-  const ratio = String(value || "16:9").match(/^(\d+(?:\.\d+)?)(?:[:x](\d+(?:\.\d+)?))?$/);
-  if (ratio) return `${ratio[1]} / ${ratio[2] || 1}`;
-  const percent = String(value).match(/^(\d+(?:\.\d+)?)%$/);
-  return percent ? `100 / ${percent[1]}` : "16 / 9";
+  return { card: config.card, entries: entities.map((entity) => ({ entity, ...options[entity] })), fitMode: config.fit_mode };
 }
 
 const styles = `
   :host { display: block; min-width: 0; font-family: var(--ha-font-family-body, inherit); font-size: var(--ha-font-size-m, 14px); }
-  .gallery-shell { container-type: inline-size; }
-  .gallery { display: grid; grid-template-columns: repeat(var(--gallery-columns), minmax(0, 1fr)); gap: var(--ha-space-2, 8px); }
-  .gallery-group { grid-column: 1 / -1; margin: var(--ha-space-4, 16px) 0 0; font-size: var(--ha-font-size-l, 18px); font-weight: var(--ha-font-weight-medium, 500); line-height: 32px; }
-  .gallery-group:first-child { margin-top: 0; }
-  .tile { position: relative; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ha-border-radius-lg, 16px); background: var(--card-background-color, #fff); }
-  .tile > :first-child { display: block; width: 100%; height: 100%; pointer-events: none; }
-  .tile button { position: absolute; inset: 0; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: inherit; }
-  .tile button:focus-visible, .side button:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
-  .empty { display: grid; place-items: center; min-height: 120px; color: var(--secondary-text-color); }
+  .preview > * { display: block; }
+  .side button:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
   ha-adaptive-dialog { --dialog-content-padding: 0; --ha-bottom-sheet-height: calc(100dvh - max(var(--safe-area-inset-top, 0px), 48px)); --ha-bottom-sheet-max-height: var(--ha-bottom-sheet-height); }
   h2 { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: inherit; }
   .action, .switcher { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: var(--ha-button-border-radius, var(--ha-border-radius-md, 8px)); font: inherit; color: var(--primary-color); background: transparent; cursor: pointer; }
@@ -124,8 +88,6 @@ const styles = `
   .side button ha-icon { flex: none; --mdc-icon-size: 22px; }
   .side .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side .unavailable { color: var(--secondary-text-color); font-size: 12px; }
-  @media (min-width: 601px) { .gallery { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px); } }
-  @container (max-width: 850px) { .gallery { grid-template-columns: repeat(min(3, var(--gallery-columns)), minmax(0, 1fr)); } }
   @media (max-width: 870px), (max-height: 500px) {
     .content { height: calc(100dvh - max(var(--safe-area-inset-top, 0px), 48px) - 68px); }
     .content { display: block; }
@@ -137,7 +99,6 @@ const styles = `
     ha-adaptive-dialog[data-drawer-open] .side { transform: translateY(0); visibility: visible; transition: transform .2s ease; }
     .side h3 { margin: 0 12px 6px; }
   }
-  @container (max-width: 720px) { .gallery { grid-template-columns: repeat(min(2, var(--gallery-columns)), minmax(0, 1fr)); } }
   @media (max-width: 410px) { .action .label, .switcher .label { display: none; } .action, .switcher { width: 44px; padding: 0; } }
   @media (prefers-reduced-motion: reduce) { .side, ha-adaptive-dialog[data-drawer-open] .side, .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: none; } }
 `;
@@ -148,7 +109,7 @@ class CameraGalleryCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
-      <div class="gallery-shell"><div class="gallery"></div></div>
+      <div class="preview"></div>
       <ha-adaptive-dialog width="full" flexcontent aria-labelledby="camera-gallery-title">
         <h2 slot="headerTitle" id="camera-gallery-title"></h2>
         <button class="action" slot="headerActionItems" type="button" hidden>
@@ -166,7 +127,7 @@ class CameraGalleryCard extends HTMLElement {
         </div>
       </ha-adaptive-dialog>
     `;
-    this._gallery = this.shadowRoot.querySelector(".gallery");
+    this._preview = this.shadowRoot.querySelector(".preview");
     this._dialog = this.shadowRoot.querySelector("ha-adaptive-dialog");
     this._title = this.shadowRoot.querySelector("h2");
     this._stage = this.shadowRoot.querySelector(".stage");
@@ -178,10 +139,10 @@ class CameraGalleryCard extends HTMLElement {
     this._action = this.shadowRoot.querySelector(".action");
     this._actionLabel = this.shadowRoot.querySelector(".action .label");
     this._switcher = this.shadowRoot.querySelector(".switcher");
-    this._previewCards = new Map();
+    this._previewCard = null;
     this._listButtons = new Map();
     this._entries = [];
-    this._galleryRevision = 0;
+    this._previewRevision = 0;
     this._viewerRevision = 0;
     this._connectionRevision = 0;
     this._swipeStart = null;
@@ -218,26 +179,37 @@ class CameraGalleryCard extends HTMLElement {
     this._stage.addEventListener("touchend", (event) => this._endSwipe(event), { passive: true });
     this._stage.addEventListener("touchcancel", () => { if (!this._stage.hasAttribute("data-swipe-animating")) this._resetSwipe(); }, { passive: true });
     this._dialog.addEventListener("touchstart", (event) => { if (event.touches.length > 1 && !this._stage.hasAttribute("data-swipe-animating")) this._resetSwipe(); }, { passive: true });
+    this.addEventListener("hass-more-info", (event) => {
+      const entity = event.detail?.entityId;
+      if (!event.composedPath().includes(this._previewCard) || !this._entries.some((entry) => entry.entity === entity)) return;
+      event.stopPropagation();
+      const opener = event.composedPath().find((node) => node instanceof HTMLElement && node.tabIndex >= 0);
+      this._open(entity, opener);
+    });
   }
 
   setConfig(config) {
+    const signature = JSON.stringify(config);
+    if (signature === this._configSignature) return;
     this._config = normalizeConfig(config);
-    this._gallery.style.setProperty("--gallery-columns", this._config.columns);
-    this._galleryRevision++;
-    this._sync(true);
+    this._configSignature = signature;
+    this._entries = this._config.entries;
+    if (this._dialog.open) this._requestClose();
+    this._buildPreview();
   }
 
   connectedCallback() {
     window.addEventListener("resize", this._onResize);
-    this._sync(true);
+    this._buildPreview();
   }
 
   disconnectedCallback() {
     this._connectionRevision++;
     this._preserveRequestedCamera = true;
     this._requestedCamera = null;
+    this._queuedOpen = null;
     window.removeEventListener("resize", this._onResize);
-    this._galleryRevision++;
+    this._previewRevision++;
     this._viewerRevision++;
     if (this._dialog.open) this._requestClose();
     this._teardownViewer();
@@ -245,41 +217,16 @@ class CameraGalleryCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this._sync();
-    for (const card of this._previewCards.values()) card.hass = hass;
+    if (this._previewCard) this._previewCard.hass = hass;
     if (this._activeCard) this._activeCard.hass = hass;
     if (this._dialog.open) this._updateLabels();
   }
 
   getCardSize() {
-    const columns = this._config?.columns || 5;
-    if (!this._config?.showGalleryGroups) return Math.max(1, Math.ceil(this._entries.length / columns) * 2);
-    let rows = 0;
-    let groupSize = 0;
-    let headings = 0;
-    for (const entry of this._entries) {
-      if (entry.group) {
-        rows += Math.ceil(groupSize / columns);
-        groupSize = 0;
-        headings++;
-      }
-      groupSize++;
-    }
-    return Math.max(1, (rows + Math.ceil(groupSize / columns)) * 2 + headings);
+    return this._previewCard?.getCardSize?.() || 3;
   }
 
   _name(entry) { return entry.name || this._hass?.states?.[entry.entity]?.attributes?.friendly_name || entry.entity; }
-
-  _sync(force = false) {
-    if (!this._config || !this.isConnected) return;
-    const entries = cameraEntries(this._config, this._hass?.states);
-    const signature = entries.map((item) => `${item.entity}:${item.group || ""}:${this._name(item)}`).join("|");
-    if (!force && signature === this._signature) return;
-    this._entries = entries;
-    this._signature = signature;
-    if (this._dialog.open && !entries.some((item) => item.entity === this._selected)) this._requestClose();
-    this._buildGallery();
-  }
 
   async _openRequestedCamera() {
     const url = new URL(window.location.href);
@@ -305,58 +252,40 @@ class CameraGalleryCard extends HTMLElement {
     this._requestedCamera = null;
   }
 
-  async _buildGallery() {
-    const revision = ++this._galleryRevision;
-    this._previewCards.clear();
-    this._gallery.replaceChildren();
-    if (!this._entries.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      empty.textContent = "No cameras selected";
-      this._gallery.append(empty);
-      return;
-    }
+  async _buildPreview() {
+    const revision = ++this._previewRevision;
+    if (!this._config || !this.isConnected) return;
     try {
       const helpers = await window.loadCardHelpers();
-      if (revision !== this._galleryRevision || !this.isConnected) return;
-      const fragment = document.createDocumentFragment();
-      for (const entry of this._entries) {
-        if (this._config.showGalleryGroups && entry.group) {
-          const heading = document.createElement("h3");
-          heading.className = "gallery-group";
-          heading.textContent = entry.group;
-          fragment.append(heading);
-        }
-        const tile = document.createElement("div");
-        tile.className = "tile";
-        tile.style.aspectRatio = frameRatio(entry.aspect_ratio);
-        const card = helpers.createCardElement({
-          type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
-          camera_view: entry.preview_view || "auto", aspect_ratio: entry.aspect_ratio || "16:9",
-          fit_mode: entry.fit_mode || this._config.fitMode || "cover",
-          tap_action: { action: "none" }, hold_action: { action: "none" }, double_tap_action: { action: "none" }
-        });
-        if (this._hass) card.hass = this._hass;
-        this._previewCards.set(entry.entity, card);
-        const button = document.createElement("button");
-        button.type = "button";
-        button.setAttribute("aria-label", `Open ${this._name(entry)} camera`);
-        button.addEventListener("click", () => this._open(entry.entity, button));
-        if (this._dialog.open && !this._opener?.isConnected && entry.entity === this._selected) this._opener = button;
-        tile.append(card, button);
-        fragment.append(tile);
-      }
-      this._gallery.replaceChildren(fragment);
+      if (revision !== this._previewRevision || !this.isConnected) return;
+      const card = helpers.createCardElement(this._config.card);
+      if (this._hass) card.hass = this._hass;
+      this._previewCard = card;
+      this._preview.replaceChildren(card);
       this._openRequestedCamera();
     } catch (error) {
-      if (revision !== this._galleryRevision) return;
-      this._gallery.textContent = "Cameras unavailable";
-      console.error("camera-gallery-card: unable to create camera previews", error);
+      if (revision !== this._previewRevision) return;
+      this._previewCard = null;
+      this._preview.textContent = "Cameras unavailable";
+      console.error("camera-gallery-card: unable to create camera card", error);
     }
   }
 
   _open(entity, opener) {
     if (!this._entries.some((entry) => entry.entity === entity)) return;
+    if (this._closeDone) {
+      this._queuedOpen = { entity, opener };
+      if (!this._reopenQueued) {
+        this._reopenQueued = true;
+        this._closeDone.then(() => {
+          this._reopenQueued = false;
+          const next = this._queuedOpen;
+          this._queuedOpen = null;
+          if (this.isConnected && next) this._open(next.entity, next.opener);
+        });
+      }
+      return;
+    }
     this._opener = opener;
     if (!this._dialog.open) {
       this._teardownViewer();
@@ -495,7 +424,7 @@ class CameraGalleryCard extends HTMLElement {
   }
 
   _requestClose() {
-    if (!this._dialog.open) return;
+    if (!this._dialog.open || this._closeDone) return;
     this._setDrawerOpen(false, false);
     this._closeDone = new Promise((resolve) => { this._resolveClose = resolve; });
     this._dialog.open = false;
@@ -524,7 +453,7 @@ class CameraGalleryCard extends HTMLElement {
       this._actionLabel.textContent = entry.action.label;
       this._action.setAttribute("aria-label", entry.action.label);
     }
-    const signature = this._signature;
+    const signature = this._configSignature;
     if (signature !== this._listSignature) {
       this._listSignature = signature;
       this._listButtons.clear();
@@ -627,7 +556,7 @@ class CameraGalleryCard extends HTMLElement {
 if (!customElements.get("camera-gallery-card")) customElements.define("camera-gallery-card", CameraGalleryCard);
 window.customCards = window.customCards || [];
 if (!window.customCards.some((card) => card.type === "camera-gallery-card")) {
-  window.customCards.push({ type: "camera-gallery-card", name: "Camera Gallery Card", preview: false, description: "A camera wall with a large switchable viewer." });
+  window.customCards.push({ type: "camera-gallery-card", name: "Camera Gallery Card", preview: false, description: "Native camera previews with a switchable large viewer." });
 }
 
-export { CameraGalleryCard, normalizeConfig, cameraEntries };
+export { CameraGalleryCard, normalizeConfig };
