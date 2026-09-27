@@ -189,13 +189,14 @@ class CameraGalleryCard extends HTMLElement {
     this._onResize = () => this._syncViewerSize();
     this._swipeImage.addEventListener("load", () => this._swipePreview.setAttribute("data-image-ready", ""));
     this._swipeImage.addEventListener("error", () => this._swipePreview.removeAttribute("data-image-ready"));
-    this._dialog.addEventListener("closed", async () => {
+    this._dialog.addEventListener("closed", async (event) => {
+      const source = event.composedPath()[0];
+      // A camera viewer may emit its own closed event inside the popup.
+      if (source !== this._dialog && source?.parentNode !== this._dialog.shadowRoot) return;
       await this._dialog.updateComplete;
       this._resolveClose?.();
       this._resolveClose = null;
       this._closeDone = null;
-      const activeDialog = this._dialog.shadowRoot?.querySelector("ha-dialog, ha-bottom-sheet");
-      if (this._dialog.open && activeDialog?.open) return;
       this._dialog.open = false;
       this._setDrawerOpen(false, false);
       this._teardownViewer();
@@ -288,8 +289,6 @@ class CameraGalleryCard extends HTMLElement {
     const revision = this._connectionRevision;
     await customElements.whenDefined("ha-adaptive-dialog");
     await this._dialog.updateComplete;
-    const nativeDialog = this._dialog.shadowRoot?.querySelector("ha-dialog, ha-bottom-sheet");
-    await nativeDialog?.updateComplete;
     if (this._closeDone) await this._closeDone;
     if (revision !== this._connectionRevision || !this.isConnected || !this._entries.some((entry) => entry.entity === entity)) return;
     this._preserveRequestedCamera = false;
