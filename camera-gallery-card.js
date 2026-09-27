@@ -408,8 +408,8 @@ class CameraGalleryCard extends HTMLElement {
       this._swipePreview.removeEventListener("transitionend", onTransitionEnd);
       this._swipeTransitionEnd = null;
       this._swipeTimer = null;
-      if (next) this._select(next);
-      this._resetSwipe();
+      if (next) this._select(next, true);
+      else this._resetSwipe();
     };
     const onTransitionEnd = (transition) => {
       if (transition.propertyName === "transform") {
@@ -464,9 +464,9 @@ class CameraGalleryCard extends HTMLElement {
     this._dialog.close();
   }
 
-  _select(entity) {
+  _select(entity, fromSwipe = false) {
     if (!this._dialog.open || !this._entries.some((entry) => entry.entity === entity)) return;
-    this._resetSwipe();
+    if (!fromSwipe) this._resetSwipe();
     if (this._selected === entity && this._activeCard) {
       if (this._dialog.hasAttribute("data-drawer-open")) this._setDrawerOpen(false);
       return;
@@ -474,7 +474,7 @@ class CameraGalleryCard extends HTMLElement {
     this._selected = entity;
     this._updateLabels(true);
     if (this._dialog.hasAttribute("data-drawer-open")) this._setDrawerOpen(false);
-    this._buildViewer();
+    this._buildViewer(fromSwipe);
   }
 
   _updateLabels(scroll = false) {
@@ -532,7 +532,7 @@ class CameraGalleryCard extends HTMLElement {
     }
   }
 
-  async _buildViewer() {
+  async _buildViewer(fromSwipe = false) {
     const revision = ++this._viewerRevision;
     this._activeCard = null;
     this._viewer.replaceChildren();
@@ -555,10 +555,12 @@ class CameraGalleryCard extends HTMLElement {
       if (this._hass) card.hass = this._hass;
       this._activeCard = card;
       this._viewer.replaceChildren(card);
+      if (fromSwipe) this._resetSwipe();
     } catch (error) {
       if (revision !== this._viewerRevision) return;
       message.textContent = "Camera viewer unavailable";
       message.setAttribute("role", "alert");
+      if (fromSwipe) this._resetSwipe();
       console.error("camera-gallery-card: unable to create camera viewer", error);
     }
   }

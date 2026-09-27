@@ -150,6 +150,18 @@ Object.defineProperty(multitouch, "touches", { value: [{ identifier: 1 }, { iden
 gallery.shadowRoot.querySelector("dialog").dispatchEvent(multitouch);
 gallery._endSwipe({ touches: [], changedTouches: [{ identifier: 1, clientX: 80, clientY: 200 }] });
 assert.equal(gallery._selected, "camera.a", "multitouch does not switch");
+await new Promise((resolve) => setTimeout(resolve, 280));
+const loadCardHelpers = window.loadCardHelpers;
+let finishLoading;
+window.loadCardHelpers = () => new Promise((resolve) => { finishLoading = resolve; });
+swipe(-120);
+await new Promise((resolve) => setTimeout(resolve, 280));
+assert.equal(gallery._selected, "camera.b");
+assert.equal(gallery.shadowRoot.querySelector(".stage").hasAttribute("data-swipe-active"), true, "incoming still remains during card setup");
+finishLoading(await loadCardHelpers());
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(gallery.shadowRoot.querySelector(".stage").hasAttribute("data-swipe-active"), false, "incoming still clears when the native card mounts");
+window.loadCardHelpers = loadCardHelpers;
 gallery.shadowRoot.querySelector(".close").click();
 
 const customViewer = new CameraGalleryCard();
