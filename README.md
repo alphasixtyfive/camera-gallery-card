@@ -1,6 +1,6 @@
 # Camera Gallery Card
 
-Keep your Home Assistant camera previews as ordinary picture entity cards. This card wraps their native grid or stack and opens a large, switchable camera viewer when you tap one. On phones, the viewer uses Home Assistant's adaptive bottom sheet and the camera list opens as a one-column drawer.
+Keep your Home Assistant camera previews as ordinary picture entity cards. This card wraps their grid, stack, or swipe card and opens a large, switchable camera viewer when you tap one. On phones, the viewer uses Home Assistant's adaptive bottom sheet and the camera list opens as a one-column drawer.
 
 ## Install
 
@@ -8,7 +8,7 @@ Add this repository to **HACS → Custom repositories** as a Dashboard repositor
 
 ## Configure
 
-Put your existing native preview card under `card:`. Its picture entity cards define camera membership, order, preview image, fit, and grid layout. Leave their tap action at the default `more-info`. The gallery catches that action only for cameras inside its own card.
+Put your existing preview card under `card:`. The nested `picture-entity` cards are the actual preview tiles: they define camera membership, order, image, fit, and layout. The wrapper also accepts a custom container such as `custom:swipe-card` around those tiles. Leave camera tap actions at the native default, `more-info`; the gallery catches that event only within its own preview card.
 
 ```yaml
 type: custom:camera-gallery-card
@@ -41,8 +41,31 @@ camera_options:
 
 For a phone dashboard with headings, put native heading and grid cards in a native `vertical-stack` under `card:`. Keep preview settings on each picture entity. `camera_options` is optional and contains only popup settings: `name`, `icon`, `group`, `action`, `viewer_view`, `fit_mode`, or `viewer`. A `group` starts a heading in the popup switcher. The default icon is `mdi:cctv`.
 
-The enlarged viewer uses a native picture entity card with live video by default. Set `viewer_view: auto` for a still image, or pass a full `viewer:` card config for a different viewer. The viewer fills its stage on wider screens and shows the whole frame on phones; `fit_mode: cover`, `contain`, or `fill` overrides that behavior globally or per camera. Previews keep their own `fit_mode` from the native picture entity config.
+The enlarged viewer is a native live `picture-entity` card by default; there is no separate popup card to configure. Set `viewer_view: auto` for a still image on one camera, or pass a full `viewer:` card config for a camera that needs a different viewer. The viewer fills its stage on wider screens and shows the whole frame on phones; `fit_mode: cover`, `contain`, or `fill` overrides that behavior globally or per camera. Previews keep their own `fit_mode` from the native picture entity config.
 
 The popup uses `ha-adaptive-dialog` for its close button, motion, and phone swipe-down dismissal. You can swipe horizontally across the standard viewer to change cameras, or use the camera list. The media stage stays fixed while that list scrolls.
 
-For a tile on another dashboard, use a native `navigate` action to `/dashboard-tablet/cameras?gallery_camera=camera.front_gate`. The camera must exist in the wrapped preview card. The one-time selection is removed when the popup closes.
+To open the same popup from Home without changing views, wrap Home's existing native preview card and point it at the Cameras view. Keep the desired camera tiles on `more-info`; other native actions, including intercom navigation, pass through unchanged:
+
+```yaml
+type: custom:camera-gallery-card
+card:
+  type: grid
+  columns: 2
+  cards:
+    - type: picture-entity
+      entity: camera.front_gate
+      tap_action:
+        action: navigate
+        navigation_path: /dashboard-intercom/front-gate
+    - type: picture-entity
+      entity: camera.driveway
+popup:
+  source:
+    dashboard: dashboard-tablet
+    view: cameras
+```
+
+The source view must contain one gallery card. It owns the popup camera list, order, names, icons, and actions; Home does not copy them. The card reads that dashboard configuration with Home Assistant's `lovelace/config` command. This is used by the HA frontend, though it is not a documented custom-card API. If the read fails, a tap opens HA's normal more-info dialog.
+
+Version 3 removes `gallery_camera` URL links. Wrap the preview card on the view where the popup should open.

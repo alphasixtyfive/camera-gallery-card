@@ -2,7 +2,7 @@ const CAMERA_ID = /^camera\.[a-z0-9_]+$/;
 const FIT_MODES = new Set(["cover", "contain", "fill"]);
 
 function normalizeConfig(config) {
-  if (!config?.card?.type) throw new Error("camera-gallery-card: card needs a native card type");
+  if (!config?.card?.type) throw new Error("camera-gallery-card: card needs a card type");
   if (config.fit_mode !== undefined && !FIT_MODES.has(config.fit_mode)) {
     throw new Error("camera-gallery-card: fit_mode must be cover, contain, or fill");
   }
@@ -15,18 +15,15 @@ function normalizeConfig(config) {
   function collect(card) {
     if (card?.type === "picture-entity" && CAMERA_ID.test(card.entity || "")) {
       if (seen.has(card.entity)) throw new Error(`camera-gallery-card: duplicate camera ${card.entity}`);
-      if (card.tap_action && card.tap_action.action !== "more-info") {
-        throw new Error(`camera-gallery-card: ${card.entity} tap action must be more-info`);
-      }
       seen.add(card.entity);
-      entities.push(card.entity);
+      if (!card.tap_action || card.tap_action.action === "more-info") entities.push(card.entity);
     }
     for (const child of card?.cards || []) collect(child);
   }
   collect(config.card);
-  if (!entities.length) throw new Error("camera-gallery-card: card needs picture-entity cameras");
+  if (!entities.length) throw new Error("camera-gallery-card: card needs a picture-entity camera with a more-info tap action");
   for (const [entity, entry] of Object.entries(options)) {
-    if (!seen.has(entity)) throw new Error(`camera-gallery-card: camera_options has unknown camera ${entity}`);
+    if (!entities.includes(entity)) throw new Error(`camera-gallery-card: camera_options has unknown camera ${entity}`);
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new Error(`camera-gallery-card: options for ${entity} need a map`);
     }
@@ -49,7 +46,40 @@ function normalizeConfig(config) {
       throw new Error(`camera-gallery-card: action for ${entity} needs a local path and label`);
     }
   }
-  return { card: config.card, entries: entities.map((entity) => ({ entity, ...options[entity] })), fitMode: config.fit_mode };
+  const popup = config.popup || {};
+  if (!popup || typeof popup !== "object" || Array.isArray(popup)) throw new Error("camera-gallery-card: popup must be a map");
+  if (Object.keys(popup).some((key) => key !== "source")) {
+    throw new Error("camera-gallery-card: popup only supports source");
+  }
+  if (popup.source && (typeof popup.source !== "object" || Array.isArray(popup.source) ||
+      typeof popup.source.dashboard !== "string" || !popup.source.dashboard ||
+      typeof popup.source.view !== "string" || !popup.source.view)) {
+    throw new Error("camera-gallery-card: popup.source needs dashboard and view");
+  }
+  return {
+    card: config.card,
+    openers: entities,
+    entries: entities.map((entity) => ({ entity, ...options[entity] })),
+    source: popup.source,
+    fitMode: config.fit_mode,
+  };
+}
+
+function findGallery(config, viewPath) {
+  const view = config.views?.find((item) => item.path === viewPath);
+  if (!view) throw new Error(`camera-gallery-card: source view ${viewPath} not found`);
+  const found = [];
+  function visit(node) {
+    if (!node || typeof node !== "object") return;
+    if (node.type === "custom:camera-gallery-card") found.push(node);
+    for (const item of node.cards || []) visit(item);
+    for (const section of node.sections || []) visit(section);
+  }
+  visit(view);
+  if (found.length !== 1 || found[0].popup?.source) {
+    throw new Error("camera-gallery-card: source view needs one gallery with its own camera list");
+  }
+  return normalizeConfig(found[0]);
 }
 
 const styles = `
@@ -144,7 +174,6 @@ class CameraGalleryCard extends HTMLElement {
     this._entries = [];
     this._previewRevision = 0;
     this._viewerRevision = 0;
-    this._connectionRevision = 0;
     this._swipeStart = null;
     this._swipeTimer = null;
     this._onResize = () => this._syncViewerSize();
@@ -163,7 +192,6 @@ class CameraGalleryCard extends HTMLElement {
       this._teardownViewer();
       if (this.isConnected && this._opener?.isConnected) this._opener.focus({ preventScroll: true });
       this._opener = null;
-      if (this.isConnected && !this._preserveRequestedCamera) this._clearRequestedCamera();
     });
     this._action.addEventListener("click", () => {
       const entry = this._entries.find((item) => item.entity === this._selected);
@@ -181,10 +209,10 @@ class CameraGalleryCard extends HTMLElement {
     this._dialog.addEventListener("touchstart", (event) => { if (event.touches.length > 1 && !this._stage.hasAttribute("data-swipe-animating")) this._resetSwipe(); }, { passive: true });
     this.addEventListener("hass-more-info", (event) => {
       const entity = event.detail?.entityId;
-      if (!event.composedPath().includes(this._previewCard) || !this._entries.some((entry) => entry.entity === entity)) return;
+      if (!event.composedPath().includes(this._previewCard) || !this._config?.openers.includes(entity)) return;
       event.stopPropagation();
       const opener = event.composedPath().find((node) => node instanceof HTMLElement && node.tabIndex >= 0);
-      this._open(entity, opener);
+      this._openFromPreview(entity, opener);
     });
   }
 
@@ -194,19 +222,25 @@ class CameraGalleryCard extends HTMLElement {
     this._config = normalizeConfig(config);
     this._configSignature = signature;
     this._entries = this._config.entries;
+    this._fitMode = this._config.fitMode;
+    this._sourcePromise = null;
+    this._sourceError = null;
+    this._sourceRevision = (this._sourceRevision || 0) + 1;
+    this._listSignature = null;
     if (this._dialog.open) this._requestClose();
     this._buildPreview();
+    this._loadSource();
   }
 
   connectedCallback() {
     window.addEventListener("resize", this._onResize);
     this._buildPreview();
+    this._loadSource();
   }
 
   disconnectedCallback() {
-    this._connectionRevision++;
-    this._preserveRequestedCamera = true;
-    this._requestedCamera = null;
+    this._sourceRevision++;
+    this._sourcePromise = null;
     this._queuedOpen = null;
     window.removeEventListener("resize", this._onResize);
     this._previewRevision++;
@@ -220,6 +254,7 @@ class CameraGalleryCard extends HTMLElement {
     if (this._previewCard) this._previewCard.hass = hass;
     if (this._activeCard) this._activeCard.hass = hass;
     if (this._dialog.open) this._updateLabels();
+    this._loadSource();
   }
 
   getCardSize() {
@@ -228,28 +263,43 @@ class CameraGalleryCard extends HTMLElement {
 
   _name(entry) { return entry.name || this._hass?.states?.[entry.entity]?.attributes?.friendly_name || entry.entity; }
 
-  async _openRequestedCamera() {
-    const url = new URL(window.location.href);
-    const entity = url.searchParams.get("gallery_camera");
-    if (this._requestedCamera || !this._entries.some((entry) => entry.entity === entity)) return;
-    this._requestedCamera = entity;
-    const revision = this._connectionRevision;
-    await customElements.whenDefined("ha-adaptive-dialog");
-    await this._dialog.updateComplete;
-    if (this._closeDone) await this._closeDone;
-    if (revision !== this._connectionRevision || !this.isConnected || !this._entries.some((entry) => entry.entity === entity)) return;
-    this._preserveRequestedCamera = false;
-    this._open(entity);
+  _loadSource() {
+    const source = this._config?.source;
+    if (!source || !this.isConnected || !this._hass || this._sourcePromise) return this._sourcePromise;
+    const revision = this._sourceRevision;
+    this._sourceError = null;
+    this._sourcePromise = Promise.resolve()
+      .then(() => this._hass.callWS({ type: "lovelace/config", url_path: source.dashboard }))
+      .then((dashboard) => {
+        const gallery = findGallery(dashboard, source.view);
+        if (revision !== this._sourceRevision || !this.isConnected) return;
+        this._entries = gallery.entries;
+        this._fitMode = this._config.fitMode || gallery.fitMode;
+        this._listSignature = null;
+        if (this._dialog.open) this._updateLabels();
+      })
+      .catch((error) => {
+        if (revision === this._sourceRevision) this._sourceError = error;
+      });
+    return this._sourcePromise;
   }
 
-  _clearRequestedCamera() {
-    if (!this._requestedCamera) return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("gallery_camera") === this._requestedCamera) {
-      url.searchParams.delete("gallery_camera");
-      history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+  async _openFromPreview(entity, opener) {
+    const revision = this._sourceRevision;
+    try {
+      if (this._sourceError) this._sourcePromise = null;
+      await this._loadSource();
+      if (this._sourceError) throw this._sourceError;
+      if (!this._entries.some((entry) => entry.entity === entity)) {
+        throw new Error(`camera-gallery-card: ${entity} is missing from the popup source`);
+      }
+      if (revision === this._sourceRevision && this.isConnected) this._open(entity, opener);
+    } catch (error) {
+      console.error("camera-gallery-card: unable to load popup cameras", error);
+      if (revision === this._sourceRevision && this.isConnected) {
+        this.dispatchEvent(new window.CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: entity } }));
+      }
     }
-    this._requestedCamera = null;
   }
 
   async _buildPreview() {
@@ -262,7 +312,6 @@ class CameraGalleryCard extends HTMLElement {
       if (this._hass) card.hass = this._hass;
       this._previewCard = card;
       this._preview.replaceChildren(card);
-      this._openRequestedCamera();
     } catch (error) {
       if (revision !== this._previewRevision) return;
       this._previewCard = null;
@@ -505,7 +554,8 @@ class CameraGalleryCard extends HTMLElement {
   }
 
   _viewerFitMode(entry) {
-    return entry.fit_mode || this._config.fitMode || (window.matchMedia("(max-width: 870px), (max-height: 500px)").matches ? "contain" : "cover");
+    return entry.fit_mode || this._fitMode ||
+      (window.matchMedia("(max-width: 870px), (max-height: 500px)").matches ? "contain" : "cover");
   }
 
   _syncViewerSize() {
@@ -535,7 +585,7 @@ class CameraGalleryCard extends HTMLElement {
       const cardConfig = entry.viewer || {
         type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
         camera_view: entry.viewer_view || "live", aspect_ratio: this._viewerRatio(),
-        fit_mode: this._viewerFitMode(entry), tap_action: { action: "none" }
+        fit_mode: this._viewerFitMode(entry), tap_action: { action: "none" },
       };
       const card = helpers.createCardElement(cardConfig);
       if (this._hass) card.hass = this._hass;
