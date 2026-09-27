@@ -90,7 +90,7 @@ const styles = `
   .tile > :first-child { display: block; width: 100%; height: 100%; pointer-events: none; }
   .tile button { position: absolute; inset: 0; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: inherit; }
   .tile button:focus-visible, .side button:focus-visible, .close:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
-  .gallery-status { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 120px; color: var(--secondary-text-color); }
+  .empty { display: grid; place-items: center; min-height: 120px; color: var(--secondary-text-color); }
   dialog {
     box-sizing: border-box;
     position: fixed;
@@ -126,7 +126,8 @@ const styles = `
   .viewer > * { display: block; width: 100%; }
   .viewer[data-native] { width: 100%; height: 100%; max-height: none; }
   .viewer[data-native] > * { height: 100%; --ha-card-border-radius: 0px; }
-  .viewer-message { color: var(--secondary-text-color); text-align: center; }
+  .viewer-status { position: absolute; z-index: 1; top: 50%; left: 50%; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); box-sizing: border-box; padding: 10px 14px; transform: translate(-50%, -50%); border-radius: var(--ha-border-radius-lg, 16px); color: var(--primary-text-color); background: var(--ha-dialog-surface-background, var(--card-background-color, #fff)); box-shadow: var(--ha-box-shadow-m, 0 4px 16px rgba(0,0,0,.2)); pointer-events: none; white-space: nowrap; }
+  .viewer-status[hidden], .viewer-status ha-spinner[hidden] { display: none; }
   .swipe-preview { position: absolute; inset: 0; display: grid; place-items: center; visibility: hidden; pointer-events: none; background: var(--primary-background-color, #fafafa); }
   .swipe-preview img { width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
   .swipe-preview[data-fit="contain"] img { object-fit: contain; }
@@ -188,7 +189,7 @@ class CameraGalleryCard extends HTMLElement {
             </button>
           </div>
           <div class="content">
-            <div class="stage"><div class="viewer"></div><div class="swipe-preview" aria-hidden="true"><img alt=""><span class="name"></span></div></div>
+            <div class="stage"><div class="viewer"></div><div class="viewer-status" role="status" hidden><ha-spinner size="small" aria-hidden="true"></ha-spinner><span></span></div><div class="swipe-preview" aria-hidden="true"><img alt=""><span class="name"></span></div></div>
             <div class="drawer-scrim"></div>
             <aside class="side" id="camera-gallery-list" aria-label="Cameras">
               <h3>Cameras</h3><div class="side-list"></div>
@@ -202,6 +203,9 @@ class CameraGalleryCard extends HTMLElement {
     this._title = this.shadowRoot.querySelector("h2");
     this._stage = this.shadowRoot.querySelector(".stage");
     this._viewer = this.shadowRoot.querySelector(".viewer");
+    this._viewerStatus = this.shadowRoot.querySelector(".viewer-status");
+    this._viewerSpinner = this._viewerStatus.querySelector("ha-spinner");
+    this._viewerLabel = this._viewerStatus.querySelector("span");
     this._swipePreview = this.shadowRoot.querySelector(".swipe-preview");
     this._swipeImage = this._swipePreview.querySelector("img");
     this._side = this.shadowRoot.querySelector(".side");
@@ -304,8 +308,7 @@ class CameraGalleryCard extends HTMLElement {
   _sync(force = false) {
     if (!this._config || !this.isConnected) return;
     const entries = cameraEntries(this._config, this._hass?.states);
-    const waitingForStates = this._config.cameras === "all" && !this._hass;
-    const signature = `${waitingForStates}|${entries.map((item) => `${item.entity}:${item.group || ""}`).join("|")}`;
+    const signature = entries.map((item) => `${item.entity}:${item.group || ""}`).join("|");
     if (!force && signature === this._signature) return;
     this._entries = entries;
     this._signature = signature;
@@ -323,29 +326,15 @@ class CameraGalleryCard extends HTMLElement {
     this._open(entity);
   }
 
-  _showGalleryStatus(message, { loading = false, role = "status" } = {}) {
-    const status = document.createElement("div");
-    status.className = "gallery-status";
-    status.setAttribute("role", role);
-    if (loading) {
-      const spinner = document.createElement("ha-spinner");
-      spinner.setAttribute("size", "small");
-      spinner.setAttribute("aria-hidden", "true");
-      status.append(spinner);
-    }
-    const label = document.createElement("span");
-    label.textContent = message;
-    status.append(label);
-    this._gallery.replaceChildren(status);
-  }
-
   async _buildGallery() {
     const revision = ++this._galleryRevision;
     this._previewCards.clear();
-    const waitingForStates = this._config.cameras === "all" && !this._hass;
-    if (waitingForStates || this._entries.length) this._showGalleryStatus("Loading cameras…", { loading: true });
+    this._gallery.replaceChildren();
     if (!this._entries.length) {
-      if (!waitingForStates) this._showGalleryStatus("No cameras selected");
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No cameras selected";
+      this._gallery.append(empty);
       return;
     }
     try {
@@ -381,7 +370,7 @@ class CameraGalleryCard extends HTMLElement {
       this._gallery.replaceChildren(fragment);
     } catch (error) {
       if (revision !== this._galleryRevision) return;
-      this._showGalleryStatus("Cameras unavailable", { role: "alert" });
+      this._gallery.textContent = "Cameras unavailable";
       console.error("camera-gallery-card: unable to create camera previews", error);
     }
   }
@@ -520,6 +509,7 @@ class CameraGalleryCard extends HTMLElement {
     this._resetSwipe();
     this._viewerRevision++;
     this._viewer.replaceChildren();
+    this._setViewerStatus();
     this._viewer.removeAttribute("data-native");
     this._activeCard = null;
     this._activeConfig = null;
@@ -610,6 +600,13 @@ class CameraGalleryCard extends HTMLElement {
     return entry.fit_mode || this._config.fitMode || (window.matchMedia("(max-width: 900px)").matches ? "contain" : "cover");
   }
 
+  _setViewerStatus(message, role = "status") {
+    this._viewerStatus.hidden = !message;
+    this._viewerStatus.setAttribute("role", role);
+    this._viewerSpinner.hidden = role === "alert";
+    this._viewerLabel.textContent = message || "";
+  }
+
   _syncViewerSize() {
     if (!this._activeConfig || !this._activeCard?.setConfig) return;
     const aspect_ratio = this._viewerRatio();
@@ -626,11 +623,7 @@ class CameraGalleryCard extends HTMLElement {
     this._activeCard = null;
     this._activeConfig = null;
     this._viewer.replaceChildren();
-    const message = document.createElement("div");
-    message.className = "viewer-message";
-    message.setAttribute("role", "status");
-    message.textContent = "Loading camera…";
-    this._viewer.append(message);
+    this._setViewerStatus("Connecting video…");
     const entry = this._entries.find((item) => item.entity === this._selected);
     if (!entry) return;
     this._viewer.toggleAttribute("data-native", !entry.viewer);
@@ -643,15 +636,19 @@ class CameraGalleryCard extends HTMLElement {
         fit_mode: this._viewerFitMode(entry), tap_action: { action: "none" }
       };
       const card = helpers.createCardElement(cardConfig);
+      const waitForFrame = !entry.viewer && cardConfig.camera_view === "live";
+      if (waitForFrame) card.addEventListener("load", () => {
+        if (revision === this._viewerRevision && this._selected === entry.entity) this._setViewerStatus();
+      }, { once: true });
       if (this._hass) card.hass = this._hass;
       this._activeCard = card;
       this._activeConfig = entry.viewer ? null : cardConfig;
       this._viewer.replaceChildren(card);
+      if (!waitForFrame) this._setViewerStatus();
       if (fromSwipe) this._resetSwipe();
     } catch (error) {
       if (revision !== this._viewerRevision) return;
-      message.textContent = "Camera viewer unavailable";
-      message.setAttribute("role", "alert");
+      this._setViewerStatus("Camera viewer unavailable", "alert");
       if (fromSwipe) this._resetSwipe();
       console.error("camera-gallery-card: unable to create camera viewer", error);
     }
