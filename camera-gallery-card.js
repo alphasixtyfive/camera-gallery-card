@@ -90,7 +90,7 @@ const styles = `
   .tile > :first-child { display: block; width: 100%; height: 100%; pointer-events: none; }
   .tile button { position: absolute; inset: 0; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: inherit; }
   .tile button:focus-visible, .side button:focus-visible, .close:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
-  .empty { display: grid; place-items: center; min-height: 120px; color: var(--secondary-text-color); }
+  .gallery-status { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 120px; color: var(--secondary-text-color); }
   dialog {
     box-sizing: border-box;
     position: fixed;
@@ -304,7 +304,8 @@ class CameraGalleryCard extends HTMLElement {
   _sync(force = false) {
     if (!this._config || !this.isConnected) return;
     const entries = cameraEntries(this._config, this._hass?.states);
-    const signature = entries.map((item) => `${item.entity}:${item.group || ""}`).join("|");
+    const waitingForStates = this._config.cameras === "all" && !this._hass;
+    const signature = `${waitingForStates}|${entries.map((item) => `${item.entity}:${item.group || ""}`).join("|")}`;
     if (!force && signature === this._signature) return;
     this._entries = entries;
     this._signature = signature;
@@ -322,15 +323,29 @@ class CameraGalleryCard extends HTMLElement {
     this._open(entity);
   }
 
+  _showGalleryStatus(message, { loading = false, role = "status" } = {}) {
+    const status = document.createElement("div");
+    status.className = "gallery-status";
+    status.setAttribute("role", role);
+    if (loading) {
+      const spinner = document.createElement("ha-spinner");
+      spinner.setAttribute("size", "small");
+      spinner.setAttribute("aria-hidden", "true");
+      status.append(spinner);
+    }
+    const label = document.createElement("span");
+    label.textContent = message;
+    status.append(label);
+    this._gallery.replaceChildren(status);
+  }
+
   async _buildGallery() {
     const revision = ++this._galleryRevision;
     this._previewCards.clear();
-    this._gallery.replaceChildren();
+    const waitingForStates = this._config.cameras === "all" && !this._hass;
+    if (waitingForStates || this._entries.length) this._showGalleryStatus("Loading cameras…", { loading: true });
     if (!this._entries.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      empty.textContent = "No cameras selected";
-      this._gallery.append(empty);
+      if (!waitingForStates) this._showGalleryStatus("No cameras selected");
       return;
     }
     try {
@@ -366,7 +381,7 @@ class CameraGalleryCard extends HTMLElement {
       this._gallery.replaceChildren(fragment);
     } catch (error) {
       if (revision !== this._galleryRevision) return;
-      this._gallery.textContent = "Cameras unavailable";
+      this._showGalleryStatus("Cameras unavailable", { role: "alert" });
       console.error("camera-gallery-card: unable to create camera previews", error);
     }
   }

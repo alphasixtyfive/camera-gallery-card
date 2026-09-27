@@ -1,6 +1,6 @@
 # Camera Gallery Card
 
-A Home Assistant camera wall with a large viewer. Previews use Home Assistant's picture entity card; opening a camera creates one active live viewer. The viewer fills the available space, with a camera list on the right on wider screens and a one-column drawer on phones.
+A Home Assistant camera wall with a large viewer. Previews use Home Assistant's picture entity card; opening a camera creates one active live viewer. The viewer fills the available space, with a camera list on the right on wider screens and a one-column drawer on phones. While the preview cards are being prepared, the gallery shows Home Assistant's spinner and a loading label; each picture entity card then handles its own image loading.
 
 ## Install
 

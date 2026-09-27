@@ -226,4 +226,32 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, false, "an unlisted camera is ignored");
 assert.equal(window.location.search, "?gallery_camera=camera.not_listed");
 
-console.log("camera gallery selection, deep links, swipe navigation, viewer lifecycle, and close: ok");
+history.pushState(null, "", "/dashboard-mobile/cameras");
+const createHelpers = window.loadCardHelpers;
+let finishPreviews;
+window.loadCardHelpers = () => new Promise((resolve) => { finishPreviews = resolve; });
+const slowGallery = new CameraGalleryCard();
+slowGallery.setConfig({ cameras: ["camera.a"] });
+document.body.append(slowGallery);
+slowGallery.hass = { states };
+assert.equal(slowGallery.shadowRoot.querySelector(".gallery-status").textContent, "Loading cameras…");
+assert.equal(slowGallery.shadowRoot.querySelector(".gallery-status ha-spinner").getAttribute("size"), "small");
+finishPreviews(await createHelpers());
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(slowGallery.shadowRoot.querySelectorAll(".tile").length, 1);
+assert.equal(slowGallery.shadowRoot.querySelector(".gallery-status"), null);
+slowGallery.remove();
+window.loadCardHelpers = createHelpers;
+
+const allGallery = new CameraGalleryCard();
+allGallery.setConfig({ cameras: "all" });
+document.body.append(allGallery);
+assert.equal(allGallery.shadowRoot.querySelector(".gallery-status").textContent, "Loading cameras…", "all waits for HA states");
+allGallery.hass = { states: {} };
+assert.equal(allGallery.shadowRoot.querySelector(".gallery-status").textContent, "No cameras selected");
+allGallery.hass = { states };
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(allGallery.shadowRoot.querySelectorAll(".tile").length, 3);
+allGallery.remove();
+
+console.log("camera gallery selection, loading, deep links, swipe navigation, viewer lifecycle, and close: ok");
