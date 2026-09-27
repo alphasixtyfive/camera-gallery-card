@@ -67,5 +67,3 @@ popup:
 ```
 
 The source view must contain one gallery card. It owns the popup camera list, order, names, icons, and actions; Home does not copy them. The card reads that dashboard configuration with Home Assistant's `lovelace/config` command. This is used by the HA frontend, though it is not a documented custom-card API. If the read fails, a tap opens HA's normal more-info dialog.
-
-Version 3 removes `gallery_camera` URL links. Wrap the preview card on the view where the popup should open.
