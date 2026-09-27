@@ -1,9 +1,9 @@
 {
   "name": "camera-gallery-card",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "description": "A Home Assistant camera wall and switchable full-screen viewer",
+  "description": "A Home Assistant camera wall and switchable maximized viewer",
   "scripts": {
     "test": "node --check camera-gallery-card.js && node test.mjs"
   },

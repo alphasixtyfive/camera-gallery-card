@@ -12,17 +12,19 @@ List cameras in the order you want them. `group` starts a new section in the swi
 
 ```yaml
 type: custom:camera-gallery-card
-columns: 5
 show_gallery_groups: true
 cameras:
   - entity: camera.front_gate
     group: Home
+    name: Front gate
+    icon: mdi:doorbell-video
     action:
       label: Open intercom
       path: /dashboard-intercom/front-gate
   - camera.driveway
   - entity: camera.parents_front_door
     group: Parents
+    name: Front door
 ```
 
 For every available camera, set `cameras: all`. To omit some, add `exclude`:
@@ -43,7 +45,8 @@ An explicit list gives predictable order and supports per-camera settings. `all`
 | `exclude` | Optional camera entity IDs to omit from either selection mode. |
 | `columns` | Preview wall columns on wide screens, from 1 to 8; default 5. Responsive layouts use up to 3 columns on tablets and 2 on phones. |
 | `show_gallery_groups` | Show group headings in the preview wall; default false. Group headings always appear in the camera switcher when supplied. |
+| `fit_mode` | How picture entity previews and the built-in viewer fill their area: `cover` (default, crop without distortion), `contain` (show the whole frame), or `fill` (stretch to fill). Set it here for all cameras or on one camera object to override it. Custom viewers control their own fit. |
 
-Camera objects can set `name`, `group`, `aspect_ratio`, `preview_view`, `viewer_view`, and `fit_mode`. The defaults are Home Assistant picture entity previews with `camera_view: auto` and a live enlarged viewer. `action` adds a button to the viewer header; give it a `label` and a local dashboard `path`. An optional `viewer` object replaces the enlarged picture entity card with another card configuration, such as an intercom card. The card leaves stream format and playback to Home Assistant or that viewer.
+Camera objects can set `name`, `icon`, `group`, `aspect_ratio`, `preview_view`, `viewer_view`, and `fit_mode`. `name` changes the preview's accessible label, popup title, and switcher label. `icon` changes the switcher icon; its default is `mdi:cctv`. `aspect_ratio` sizes the preview tile. The enlarged native viewer uses the popup's available area, with `cover` as the default fit mode. Previews use Home Assistant picture entity cards with `camera_view: auto`; the enlarged viewer requests live video. `action` adds a button to the viewer header; give it a `label` and a local dashboard `path`. An optional `viewer` object replaces the enlarged picture entity card with another card configuration, such as an intercom card. The card leaves stream format and playback to Home Assistant or that viewer.
 
-On a phone, swipe the standard enlarged viewer horizontally to move to the adjacent camera. The viewer follows the finger and uses that camera's `entity_picture` as the incoming still image while it switches. Custom viewers retain their own touch controls; use the Cameras drawer to switch from one. The media area stays fixed while the camera list scrolls. Motion follows the device's reduced-motion setting.
+The maximized popup keeps a wider frame on desktop and a small safe-area inset on phones. Its corners follow the active Home Assistant dialog radius. Swipe the standard enlarged viewer horizontally to move to the adjacent camera. The viewer follows the finger and uses that camera's `entity_picture` as the incoming still image while it switches. Custom viewers retain their own touch controls; use the Cameras drawer to switch from one. The media area stays fixed while the camera list scrolls. Motion follows the device's reduced-motion setting.

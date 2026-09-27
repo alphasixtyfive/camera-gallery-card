@@ -21,6 +21,7 @@ window.loadCardHelpers = async () => ({
   createCardElement(config) {
     const card = document.createElement("div");
     card.config = config;
+    card.setConfig = (next) => { card.config = next; };
     created.push(card);
     return card;
   },
@@ -41,10 +42,14 @@ assert.deepEqual(cameraEntries(normalizeConfig({ cameras: [
 assert.throws(() => normalizeConfig({ cameras: ["switch.bad"] }), /invalid camera/);
 assert.throws(() => normalizeConfig({ cameras: [{ entity: "camera.a", group: " " }] }), /group/);
 assert.throws(() => normalizeConfig({ cameras: ["camera.a"], show_gallery_groups: "yes" }), /show_gallery_groups/);
+assert.throws(() => normalizeConfig({ cameras: ["camera.a"], fit_mode: "crop" }), /fit_mode/);
+assert.throws(() => normalizeConfig({ cameras: [{ entity: "camera.a", fit_mode: "crop" }] }), /fit_mode/);
+assert.throws(() => normalizeConfig({ cameras: [{ entity: "camera.a", name: " " }] }), /name/);
+assert.throws(() => normalizeConfig({ cameras: [{ entity: "camera.a", icon: " " }] }), /icon/);
 assert.throws(() => normalizeConfig({ cameras: [{ entity: "camera.a", action: { label: "Open", path: "//example.com" } }] }), /local path/);
 
 const gallery = new CameraGalleryCard();
-gallery.setConfig({ cameras: [{ entity: "camera.a", group: "Home" }, { entity: "camera.b", group: "Parents" }], columns: 5, show_gallery_groups: true });
+gallery.setConfig({ cameras: [{ entity: "camera.a", group: "Home", name: "Gate", icon: "mdi:doorbell-video" }, { entity: "camera.b", group: "Parents", fit_mode: "contain" }], columns: 5, show_gallery_groups: true });
 document.body.append(gallery);
 gallery.hass = { states };
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -53,6 +58,7 @@ assert.deepEqual([...gallery.shadowRoot.querySelectorAll(".gallery-group")].map(
 assert.equal(gallery.shadowRoot.querySelector(".header").firstElementChild.className, "close");
 assert.equal(created.length, 2);
 assert(created.every((card) => card.config.camera_view === "auto"));
+assert.deepEqual(created.map((card) => card.config.fit_mode), ["cover", "contain"]);
 
 gallery.shadowRoot.querySelector(".tile button").click();
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -61,7 +67,14 @@ assert.equal(gallery.shadowRoot.querySelector(".viewer").children.length, 1);
 const first = gallery.shadowRoot.querySelector(".viewer").firstElementChild;
 assert.equal(first.config.camera_view, "live");
 assert.equal(first.config.entity, "camera.a");
+assert.equal(first.config.fit_mode, "cover");
+assert.equal(gallery.shadowRoot.querySelector(".viewer").hasAttribute("data-native"), true);
+gallery._viewer.getBoundingClientRect = () => ({ width: 360, height: 700 });
+window.dispatchEvent(new window.Event("resize"));
+assert.equal(first.config.aspect_ratio, "360:700");
 const firstRow = gallery.shadowRoot.querySelector(".side button");
+assert.equal(firstRow.querySelector("ha-icon").getAttribute("icon"), "mdi:doorbell-video");
+assert.equal(firstRow.querySelector(".name").textContent, "Gate");
 assert.deepEqual([...gallery.shadowRoot.querySelectorAll(".side h4")].map((heading) => heading.textContent), ["Home", "Parents"]);
 gallery.shadowRoot.querySelector(".switcher").click();
 assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), true);
@@ -83,6 +96,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), false);
 assert.equal(first.isConnected, false);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.b");
+assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.fit_mode, "contain");
 gallery.shadowRoot.querySelector(".close").click();
 assert.equal(gallery.shadowRoot.querySelector(".viewer").children.length, 0);
 assert.equal(gallery.shadowRoot.querySelector("dialog").open, false);

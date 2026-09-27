@@ -1,4 +1,5 @@
 const CAMERA_ID = /^camera\.[a-z0-9_]+$/;
+const FIT_MODES = new Set(["cover", "contain", "fill"]);
 
 function normalizeConfig(config) {
   if (!config || (config.cameras !== "all" && !Array.isArray(config.cameras))) {
@@ -9,6 +10,9 @@ function normalizeConfig(config) {
   }
   if (config.exclude !== undefined && !Array.isArray(config.exclude)) {
     throw new Error("camera-gallery-card: exclude must be a list");
+  }
+  if (config.fit_mode !== undefined && !FIT_MODES.has(config.fit_mode)) {
+    throw new Error("camera-gallery-card: fit_mode must be cover, contain, or fill");
   }
   const exclude = new Set(config.exclude || []);
   for (const id of exclude) {
@@ -21,6 +25,15 @@ function normalizeConfig(config) {
     }
     if (entry.viewer && (typeof entry.viewer !== "object" || !entry.viewer.type)) {
       throw new Error(`camera-gallery-card: viewer for ${entry.entity} needs a card type`);
+    }
+    if (entry.name !== undefined && (typeof entry.name !== "string" || !entry.name.trim())) {
+      throw new Error(`camera-gallery-card: name for ${entry.entity} needs text`);
+    }
+    if (entry.icon !== undefined && (typeof entry.icon !== "string" || !entry.icon.trim())) {
+      throw new Error(`camera-gallery-card: icon for ${entry.entity} needs a name`);
+    }
+    if (entry.fit_mode !== undefined && !FIT_MODES.has(entry.fit_mode)) {
+      throw new Error(`camera-gallery-card: fit_mode for ${entry.entity} must be cover, contain, or fill`);
     }
     if (entry.group !== undefined && (typeof entry.group !== "string" || !entry.group.trim())) {
       throw new Error(`camera-gallery-card: group for ${entry.entity} needs a name`);
@@ -37,7 +50,7 @@ function normalizeConfig(config) {
   if (config.show_gallery_groups !== undefined && typeof config.show_gallery_groups !== "boolean") {
     throw new Error("camera-gallery-card: show_gallery_groups must be true or false");
   }
-  return { cameras, exclude, columns, showGalleryGroups: config.show_gallery_groups || false };
+  return { cameras, exclude, columns, fitMode: config.fit_mode || "cover", showGalleryGroups: config.show_gallery_groups || false };
 }
 
 function cameraEntries(config, states) {
@@ -69,17 +82,34 @@ function frameRatio(value) {
 }
 
 const styles = `
-  :host { display: block; min-width: 0; font-family: var(--ha-font-family-body, inherit); font-size: var(--ha-font-size-m, 14px); --gallery-dialog-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 24px)); }
+  :host { display: block; min-width: 0; font-family: var(--ha-font-family-body, inherit); font-size: var(--ha-font-size-m, 14px); --gallery-dialog-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 24px)); --gallery-dialog-inline-inset: 16px; --gallery-dialog-block-inset: 16px; }
   .gallery { display: grid; grid-template-columns: repeat(var(--gallery-columns), minmax(0, 1fr)); gap: var(--ha-space-2, 8px); }
   .gallery-group { grid-column: 1 / -1; margin: var(--ha-space-4, 16px) 0 0; font-size: var(--ha-font-size-l, 18px); font-weight: var(--ha-font-weight-medium, 500); line-height: 32px; }
   .gallery-group:first-child { margin-top: 0; }
-  .tile { position: relative; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ha-card-border-radius, 12px); background: var(--card-background-color, #fff); }
+  .tile { position: relative; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ha-border-radius-lg, 16px); background: var(--card-background-color, #fff); }
   .tile > :first-child { display: block; width: 100%; height: 100%; pointer-events: none; }
   .tile button { position: absolute; inset: 0; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: inherit; }
-  .tile button:hover { box-shadow: inset 0 0 0 3px var(--primary-color); }
   .tile button:focus-visible, .side button:focus-visible, .close:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
   .empty { display: grid; place-items: center; min-height: 120px; color: var(--secondary-text-color); }
-  dialog { box-sizing: border-box; position: fixed; width: calc(100vw - 24px); width: calc(100dvw - 24px); height: calc(100vh - 24px); height: calc(100dvh - 24px); max-width: none; max-height: none; padding: 0; border: 1px solid var(--divider-color, rgba(127,127,127,.25)); border-radius: var(--gallery-dialog-radius); color: var(--primary-text-color); background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff))); box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 16px 48px rgba(0,0,0,.3))); overflow: hidden; }
+  dialog {
+    box-sizing: border-box;
+    position: fixed;
+    inset: auto;
+    top: calc(env(safe-area-inset-top, 0px) + var(--gallery-dialog-block-inset));
+    left: calc(env(safe-area-inset-left, 0px) + var(--gallery-dialog-inline-inset));
+    width: calc(100dvw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - var(--gallery-dialog-inline-inset) - var(--gallery-dialog-inline-inset));
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--gallery-dialog-block-inset) - var(--gallery-dialog-block-inset));
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--divider-color, rgba(127,127,127,.25));
+    border-radius: var(--gallery-dialog-radius);
+    color: var(--primary-text-color);
+    background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff)));
+    box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 16px 48px rgba(0,0,0,.3)));
+    overflow: hidden;
+  }
   dialog::backdrop { background: rgba(0,0,0,.72); }
   .dialog-layout { display: flex; flex-direction: column; height: 100%; min-height: 0; }
   .header { display: flex; align-items: center; gap: var(--ha-space-2, 8px); min-height: 64px; box-sizing: border-box; padding: 8px; border-bottom: 1px solid var(--divider-color, rgba(127,127,127,.25)); }
@@ -91,12 +121,16 @@ const styles = `
   .switcher { display: none; }
   .close:hover, .action:hover, .switcher:hover { background: var(--secondary-background-color, rgba(127,127,127,.12)); }
   .content { position: relative; display: grid; grid-template-columns: minmax(0,1fr) clamp(280px, 20vw, 340px); flex: 1; min-height: 0; }
-  .stage { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; padding: 20px; overflow: hidden; background: var(--primary-background-color, #fafafa); }
+  .stage { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; background: var(--primary-background-color, #fafafa); }
   .viewer { width: min(100%, 160vh); max-height: 100%; }
   .viewer > * { display: block; width: 100%; }
+  .viewer[data-native] { width: 100%; height: 100%; max-height: none; }
+  .viewer[data-native] > * { height: 100%; }
   .viewer-message { color: var(--secondary-text-color); text-align: center; }
   .swipe-preview { position: absolute; inset: 0; display: grid; place-items: center; visibility: hidden; pointer-events: none; background: var(--primary-background-color, #fafafa); }
-  .swipe-preview img { width: 100%; height: 100%; object-fit: contain; visibility: hidden; }
+  .swipe-preview img { width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
+  .swipe-preview[data-fit="contain"] img { object-fit: contain; }
+  .swipe-preview[data-fit="fill"] img { object-fit: fill; }
   .swipe-preview[data-image-ready] img { visibility: visible; }
   .swipe-preview .name { position: absolute; padding: 8px 12px; border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); background: var(--card-background-color, #fff); }
   .swipe-preview[data-image-ready] .name { display: none; }
@@ -113,10 +147,12 @@ const styles = `
   .side button ha-icon { flex: none; --mdc-icon-size: 22px; }
   .side .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side .unavailable { color: var(--secondary-text-color); font-size: 12px; }
+  @media (min-width: 601px) { .gallery { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px); } }
+  @media (min-width: 901px) { :host { --gallery-dialog-inline-inset: clamp(24px, 2.5vw, 48px); --gallery-dialog-block-inset: clamp(20px, 3vh, 32px); } }
   @media (max-width: 850px) { .gallery { grid-template-columns: repeat(min(3, var(--gallery-columns)), minmax(0, 1fr)); } }
   @media (max-width: 900px) {
     .content { display: block; }
-    .stage { box-sizing: border-box; height: 100%; padding: 8px; }
+    .stage { height: 100%; }
     .switcher { display: inline-flex; }
     .drawer-scrim { position: absolute; inset: 0; z-index: 1; background: rgba(0,0,0,.48); }
     .side { position: absolute; inset: auto 0 0; z-index: 2; box-sizing: border-box; max-height: min(65%, 600px); border-left: 0; border-top: 1px solid var(--divider-color, rgba(127,127,127,.25)); border-radius: var(--gallery-dialog-radius) var(--gallery-dialog-radius) 0 0; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff))); box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 -8px 28px rgba(0,0,0,.22))); transform: translateY(100%); visibility: hidden; transition: transform .2s ease, visibility 0s .2s; }
@@ -125,7 +161,6 @@ const styles = `
     .side h3 { margin: 0 12px 6px; }
   }
   @media (max-width: 720px) { .gallery { grid-template-columns: repeat(min(2, var(--gallery-columns)), minmax(0, 1fr)); } }
-  @media (max-width: 450px), (max-height: 500px) { dialog { inset: 0; width: 100vw; width: 100dvw; height: 100vh; height: 100dvh; margin: 0; border: 0; border-radius: 0; padding: var(--safe-area-inset-top, env(safe-area-inset-top, 0px)) var(--safe-area-inset-right, env(safe-area-inset-right, 0px)) var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)) var(--safe-area-inset-left, env(safe-area-inset-left, 0px)); } }
   @media (max-width: 410px) { .action .label, .switcher .label { display: none; } .action, .switcher { width: 44px; padding: 0; } }
   @media (prefers-reduced-motion: reduce) { .side, dialog[data-drawer-open] .side, .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: none; } }
 `;
@@ -180,6 +215,7 @@ class CameraGalleryCard extends HTMLElement {
     this._viewerRevision = 0;
     this._swipeStart = null;
     this._swipeTimer = null;
+    this._onResize = () => this._syncViewerSize();
     this._swipeImage.addEventListener("load", () => this._swipePreview.setAttribute("data-image-ready", ""));
     this._swipeImage.addEventListener("error", () => this._swipePreview.removeAttribute("data-image-ready"));
     this.shadowRoot.querySelector(".close").addEventListener("click", () => this._requestClose());
@@ -224,9 +260,13 @@ class CameraGalleryCard extends HTMLElement {
     this._sync(true);
   }
 
-  connectedCallback() { this._sync(true); }
+  connectedCallback() {
+    window.addEventListener("resize", this._onResize);
+    this._sync(true);
+  }
 
   disconnectedCallback() {
+    window.removeEventListener("resize", this._onResize);
     this._galleryRevision++;
     this._viewerRevision++;
     if (this._dialog.open) this._requestClose();
@@ -299,7 +339,7 @@ class CameraGalleryCard extends HTMLElement {
         const card = helpers.createCardElement({
           type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
           camera_view: entry.preview_view || "auto", aspect_ratio: entry.aspect_ratio || "16:9",
-          ...(entry.fit_mode ? { fit_mode: entry.fit_mode } : {}),
+          fit_mode: entry.fit_mode || this._config.fitMode,
           tap_action: { action: "none" }, hold_action: { action: "none" }, double_tap_action: { action: "none" }
         });
         if (this._hass) card.hass = this._hass;
@@ -362,6 +402,7 @@ class CameraGalleryCard extends HTMLElement {
       if (!adjacent) return;
       start.direction = direction;
       start.adjacent = adjacent.entity;
+      this._swipePreview.dataset.fit = adjacent.fit_mode || this._config.fitMode;
       this._swipePreview.removeAttribute("data-image-ready");
       this._swipePreview.querySelector(".name").textContent = this._name(adjacent);
       const picture = this._hass?.states?.[adjacent.entity]?.attributes?.entity_picture;
@@ -454,7 +495,9 @@ class CameraGalleryCard extends HTMLElement {
     this._resetSwipe();
     this._viewerRevision++;
     this._viewer.replaceChildren();
+    this._viewer.removeAttribute("data-native");
     this._activeCard = null;
+    this._activeConfig = null;
   }
 
   _requestClose() {
@@ -501,7 +544,6 @@ class CameraGalleryCard extends HTMLElement {
         const button = document.createElement("button");
         button.type = "button";
         const icon = document.createElement("ha-icon");
-        icon.setAttribute("icon", "mdi:cctv");
         icon.setAttribute("aria-hidden", "true");
         const name = document.createElement("span");
         name.className = "name";
@@ -510,7 +552,7 @@ class CameraGalleryCard extends HTMLElement {
         status.textContent = "Unavailable";
         button.append(icon, name, status);
         button.addEventListener("click", () => this._select(item.entity));
-        this._listButtons.set(item.entity, { button, name, status });
+        this._listButtons.set(item.entity, { button, icon, name, status });
         this._list.append(button);
       }
     }
@@ -518,8 +560,10 @@ class CameraGalleryCard extends HTMLElement {
       const row = this._listButtons.get(item.entity);
       const current = item.entity === this._selected ? "true" : "false";
       const name = this._name(item);
+      const icon = item.icon || "mdi:cctv";
       const hideStatus = !["unavailable", "unknown"].includes(this._hass?.states?.[item.entity]?.state);
       if (row.button.getAttribute("aria-current") !== current) row.button.setAttribute("aria-current", current);
+      if (row.icon.getAttribute("icon") !== icon) row.icon.setAttribute("icon", icon);
       if (row.name.textContent !== name) row.name.textContent = name;
       if (row.status.hidden !== hideStatus) row.status.hidden = hideStatus;
     }
@@ -532,9 +576,23 @@ class CameraGalleryCard extends HTMLElement {
     }
   }
 
+  _viewerRatio() {
+    const { width, height } = this._viewer.getBoundingClientRect();
+    return width > 0 && height > 0 ? `${Math.round(width)}:${Math.round(height)}` : "16:9";
+  }
+
+  _syncViewerSize() {
+    if (!this._activeConfig || !this._activeCard?.setConfig) return;
+    const aspect_ratio = this._viewerRatio();
+    if (aspect_ratio === this._activeConfig.aspect_ratio) return;
+    this._activeConfig = { ...this._activeConfig, aspect_ratio };
+    this._activeCard.setConfig(this._activeConfig);
+  }
+
   async _buildViewer(fromSwipe = false) {
     const revision = ++this._viewerRevision;
     this._activeCard = null;
+    this._activeConfig = null;
     this._viewer.replaceChildren();
     const message = document.createElement("div");
     message.className = "viewer-message";
@@ -543,17 +601,19 @@ class CameraGalleryCard extends HTMLElement {
     this._viewer.append(message);
     const entry = this._entries.find((item) => item.entity === this._selected);
     if (!entry) return;
+    this._viewer.toggleAttribute("data-native", !entry.viewer);
     try {
       const helpers = await window.loadCardHelpers();
       if (revision !== this._viewerRevision || !this._dialog.open || this._selected !== entry.entity) return;
       const cardConfig = entry.viewer || {
         type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
-        camera_view: entry.viewer_view || "live", aspect_ratio: entry.aspect_ratio || "16:9",
-        fit_mode: "contain", tap_action: { action: "none" }
+        camera_view: entry.viewer_view || "live", aspect_ratio: this._viewerRatio(),
+        fit_mode: entry.fit_mode || this._config.fitMode, tap_action: { action: "none" }
       };
       const card = helpers.createCardElement(cardConfig);
       if (this._hass) card.hass = this._hass;
       this._activeCard = card;
+      this._activeConfig = entry.viewer ? null : cardConfig;
       this._viewer.replaceChildren(card);
       if (fromSwipe) this._resetSwipe();
     } catch (error) {
