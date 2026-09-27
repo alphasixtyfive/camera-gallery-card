@@ -308,7 +308,17 @@ class CameraGalleryCard extends HTMLElement {
     this._entries = entries;
     this._signature = signature;
     if (this._dialog.open && !entries.some((item) => item.entity === this._selected)) this._requestClose();
+    this._openRequestedCamera();
     this._buildGallery();
+  }
+
+  _openRequestedCamera() {
+    const url = new URL(window.location.href);
+    const entity = url.searchParams.get("gallery_camera");
+    if (!this._entries.some((entry) => entry.entity === entity)) return;
+    url.searchParams.delete("gallery_camera");
+    history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+    this._open(entity);
   }
 
   async _buildGallery() {
@@ -348,6 +358,7 @@ class CameraGalleryCard extends HTMLElement {
         button.type = "button";
         button.setAttribute("aria-label", `Open ${this._name(entry)} camera`);
         button.addEventListener("click", () => this._open(entry.entity, button));
+        if (this._dialog.open && !this._opener?.isConnected && entry.entity === this._selected) this._opener = button;
         tile.append(card, button);
         fragment.append(tile);
       }

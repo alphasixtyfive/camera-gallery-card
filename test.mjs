@@ -190,4 +190,35 @@ customViewer._endSwipe({ touches: [], changedTouches: [{ identifier: 1, clientX:
 assert.equal(customViewer._selected, "camera.a", "custom viewers keep their own touch gestures");
 customViewer.shadowRoot.querySelector(".close").click();
 window.matchMedia = originalMatchMedia;
-console.log("camera gallery selection, swipe navigation, viewer lifecycle, and close: ok");
+
+history.pushState(null, "", "/dashboard-tablet/cameras?gallery_camera=camera.b");
+const linkedGallery = new CameraGalleryCard();
+linkedGallery.setConfig({ cameras: ["camera.a", "camera.b"] });
+document.body.append(linkedGallery);
+linkedGallery.hass = { states };
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, true);
+assert.equal(linkedGallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.b");
+assert.equal(window.location.search, "", "the one-time camera link is consumed");
+linkedGallery.shadowRoot.querySelector(".close").click();
+linkedGallery.hass = { states };
+assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, false, "the link does not reopen after closing");
+await new Promise((resolve) => setTimeout(resolve, 0));
+linkedGallery.remove();
+history.pushState(null, "", "/dashboard-tablet/cameras?view=kept&gallery_camera=camera.a#position");
+document.body.append(linkedGallery);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, true, "a cached gallery handles the next link");
+assert.equal(linkedGallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.a");
+assert.equal(window.location.search, "?view=kept", "other query parameters remain");
+assert.equal(window.location.hash, "#position", "the URL fragment remains");
+linkedGallery.shadowRoot.querySelector(".close").click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+linkedGallery.remove();
+history.pushState(null, "", "/dashboard-tablet/cameras?gallery_camera=camera.not_listed");
+document.body.append(linkedGallery);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, false, "an unlisted camera is ignored");
+assert.equal(window.location.search, "?gallery_camera=camera.not_listed");
+
+console.log("camera gallery selection, deep links, swipe navigation, viewer lifecycle, and close: ok");
