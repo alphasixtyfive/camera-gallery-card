@@ -10,11 +10,15 @@ Object.assign(globalThis, {
   history: window.history,
   Event: window.Event,
 });
-window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-window.HTMLDialogElement.prototype.close = function () {
-  this.open = false;
-  setTimeout(() => this.dispatchEvent(new window.Event("close")), 0);
-};
+class FakeAdaptiveDialog extends window.HTMLElement {
+  get open() { return this._open || false; }
+  set open(value) {
+    const wasOpen = this.open;
+    this._open = Boolean(value);
+    if (wasOpen && !this._open) setTimeout(() => this.dispatchEvent(new window.Event("closed")), 0);
+  }
+}
+window.customElements.define("ha-adaptive-dialog", FakeAdaptiveDialog);
 
 const created = [];
 window.loadCardHelpers = async () => ({
@@ -55,24 +59,24 @@ gallery.hass = { states };
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(gallery.shadowRoot.querySelectorAll(".tile").length, 2);
 assert.deepEqual([...gallery.shadowRoot.querySelectorAll(".gallery-group")].map((heading) => heading.textContent), ["Home", "Parents"]);
-assert.equal(gallery.shadowRoot.querySelector(".header").firstElementChild.className, "close");
+assert.equal(gallery.shadowRoot.querySelector("h2").getAttribute("slot"), "headerTitle");
 assert.equal(created.length, 2);
 assert(created.every((card) => card.config.camera_view === "auto"));
 assert.deepEqual(created.map((card) => card.config.fit_mode), ["cover", "contain"]);
 
 gallery.shadowRoot.querySelector(".tile button").click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(gallery.shadowRoot.querySelector("dialog").open, true);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").children.length, 1);
 const first = gallery.shadowRoot.querySelector(".viewer").firstElementChild;
 assert.equal(first.config.camera_view, "live");
 assert.equal(first.config.entity, "camera.a");
 assert.equal(first.config.fit_mode, "cover");
 assert.equal(gallery.shadowRoot.querySelector(".viewer").hasAttribute("data-native"), true);
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, false, "popup waits for the first frame");
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").textContent, "Connecting video…");
-first.dispatchEvent(new window.Event("load"));
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, true, "first frame clears the popup spinner");
+assert.equal(gallery.shadowRoot.querySelector(".viewer-status"), null, "native viewer owns loading feedback");
+gallery.setConfig({ cameras: [{ entity: "camera.a", group: "Home", name: "Gate", icon: "mdi:doorbell-video" }, { entity: "camera.b", group: "Parents", fit_mode: "contain" }], columns: 5, show_gallery_groups: true });
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true, "dashboard config refresh keeps the popup open");
+assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild, first, "dashboard config refresh keeps live media mounted");
 gallery._viewer.getBoundingClientRect = () => ({ width: 360, height: 700 });
 window.dispatchEvent(new window.Event("resize"));
 assert.equal(first.config.aspect_ratio, "360:700");
@@ -81,10 +85,10 @@ assert.equal(firstRow.querySelector("ha-icon").getAttribute("icon"), "mdi:doorbe
 assert.equal(firstRow.querySelector(".name").textContent, "Gate");
 assert.deepEqual([...gallery.shadowRoot.querySelectorAll(".side h4")].map((heading) => heading.textContent), ["Home", "Parents"]);
 gallery.shadowRoot.querySelector(".switcher").click();
-assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), true);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").hasAttribute("data-drawer-open"), true);
 assert.equal(gallery.shadowRoot.querySelector(".switcher").getAttribute("aria-expanded"), "true");
 firstRow.click();
-assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), false);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").hasAttribute("data-drawer-open"), false);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild, first);
 gallery.shadowRoot.querySelector(".switcher").click();
 gallery.hass = { states: { ...states, "camera.a": { state: "unavailable", attributes: { friendly_name: "Zed" } } } };
@@ -93,25 +97,22 @@ assert.equal(firstRow.querySelector(".unavailable").hidden, false);
 
 gallery.shadowRoot.querySelectorAll(".side button")[1].click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), false);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").hasAttribute("data-drawer-open"), false);
 assert.equal(first.isConnected, false);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.b");
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.fit_mode, "contain");
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, false, "switching starts the new camera's loading state");
-gallery.shadowRoot.querySelector(".close").click();
+gallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(gallery.shadowRoot.querySelector(".viewer").children.length, 0);
-assert.equal(gallery.shadowRoot.querySelector("dialog").open, false);
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, true);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").open, false);
 gallery.shadowRoot.querySelector(".tile button").click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(gallery.shadowRoot.querySelector("dialog").open, true);
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.a");
 gallery.shadowRoot.querySelector(".switcher").click();
-gallery.shadowRoot.querySelector("dialog").dispatchEvent(new window.Event("cancel", { cancelable: true }));
-assert.equal(gallery.shadowRoot.querySelector("dialog").open, true);
-assert.equal(gallery.shadowRoot.querySelector("dialog").hasAttribute("data-drawer-open"), false);
-gallery.shadowRoot.querySelector("dialog").dispatchEvent(new window.Event("cancel", { cancelable: true }));
-assert.equal(gallery.shadowRoot.querySelector("dialog").open, false);
+gallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(gallery.shadowRoot.querySelector("ha-adaptive-dialog").open, false);
 assert.equal(gallery.shadowRoot.querySelector(".viewer").children.length, 0);
 
 const originalMatchMedia = window.matchMedia;
@@ -126,7 +127,6 @@ assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.confi
 window.matchMedia = (query) => ({ matches: query.includes("max-width") });
 window.dispatchEvent(new window.Event("resize"));
 assert.equal(gallery.shadowRoot.querySelector(".viewer").firstElementChild.config.fit_mode, "contain", "mobile fit returns after resize");
-gallery.shadowRoot.querySelector(".viewer").firstElementChild.dispatchEvent(new window.Event("load"));
 const swipe = (dx, dy = 0, path = []) => {
   const start = { identifier: 1, clientX: 200, clientY: 200 };
   gallery._startSwipe({ touches: [start], composedPath: () => path });
@@ -137,7 +137,7 @@ gallery._startSwipe({ touches: [{ identifier: 1, clientX: 200, clientY: 200 }], 
 gallery._moveSwipe({ touches: [{ identifier: 1, clientX: 80, clientY: 200 }] });
 assert.equal(gallery.shadowRoot.querySelector(".stage").hasAttribute("data-swipe-active"), true);
 assert.match(gallery.shadowRoot.querySelector(".viewer").style.transform, /-120px/);
-assert.equal(gallery.shadowRoot.querySelector(".swipe-preview .name").textContent, "Alpha");
+assert.equal(gallery.shadowRoot.querySelector(".swipe-preview .name"), null, "swipe preview has no centered camera name");
 assert.equal(gallery.shadowRoot.querySelector(".swipe-preview").dataset.fit, "contain", "incoming still uses the viewer fit");
 gallery._endSwipe({ touches: [], changedTouches: [{ identifier: 1, clientX: 80, clientY: 200 }] });
 await new Promise((resolve) => setTimeout(resolve, 280));
@@ -173,7 +173,7 @@ assert.equal(gallery._selected, "camera.a", "edge, short, vertical, and control 
 gallery._startSwipe({ touches: [{ identifier: 1, clientX: 200, clientY: 200 }], composedPath: () => [] });
 const multitouch = new window.Event("touchstart");
 Object.defineProperty(multitouch, "touches", { value: [{ identifier: 1 }, { identifier: 2 }] });
-gallery.shadowRoot.querySelector("dialog").dispatchEvent(multitouch);
+gallery.shadowRoot.querySelector("ha-adaptive-dialog").dispatchEvent(multitouch);
 gallery._endSwipe({ touches: [], changedTouches: [{ identifier: 1, clientX: 80, clientY: 200 }] });
 assert.equal(gallery._selected, "camera.a", "multitouch does not switch");
 await new Promise((resolve) => setTimeout(resolve, 280));
@@ -184,15 +184,12 @@ swipe(-120);
 await new Promise((resolve) => setTimeout(resolve, 280));
 assert.equal(gallery._selected, "camera.b");
 assert.equal(gallery.shadowRoot.querySelector(".stage").hasAttribute("data-swipe-active"), true, "incoming still remains during card setup");
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, false, "popup spinner remains during slow setup");
 finishLoading(await loadCardHelpers());
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(gallery.shadowRoot.querySelector(".stage").hasAttribute("data-swipe-active"), false, "incoming still clears when the native card mounts");
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, false, "popup spinner remains until video loads");
-gallery.shadowRoot.querySelector(".viewer").firstElementChild.dispatchEvent(new window.Event("load"));
-assert.equal(gallery.shadowRoot.querySelector(".viewer-status").hidden, true);
 window.loadCardHelpers = loadCardHelpers;
-gallery.shadowRoot.querySelector(".close").click();
+gallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
 
 const customViewer = new CameraGalleryCard();
 customViewer.setConfig({ cameras: [{ entity: "camera.a", viewer: { type: "custom:intercom-camera-card" } }, "camera.b"] });
@@ -201,11 +198,11 @@ customViewer.hass = { states };
 await new Promise((resolve) => setTimeout(resolve, 0));
 customViewer.shadowRoot.querySelector(".tile button").click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(customViewer.shadowRoot.querySelector(".viewer-status").hidden, true, "custom viewers own their loading state after mounting");
 customViewer._startSwipe({ touches: [{ identifier: 1, clientX: 200, clientY: 200 }], composedPath: () => [] });
 customViewer._endSwipe({ touches: [], changedTouches: [{ identifier: 1, clientX: 80, clientY: 200 }] });
 assert.equal(customViewer._selected, "camera.a", "custom viewers keep their own touch gestures");
-customViewer.shadowRoot.querySelector(".close").click();
+customViewer._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
 const stillViewer = new CameraGalleryCard();
 stillViewer.setConfig({ cameras: [{ entity: "camera.a", viewer_view: "auto" }] });
 document.body.append(stillViewer);
@@ -213,8 +210,9 @@ stillViewer.hass = { states };
 await new Promise((resolve) => setTimeout(resolve, 0));
 stillViewer.shadowRoot.querySelector(".tile button").click();
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(stillViewer.shadowRoot.querySelector(".viewer-status").hidden, true, "non-live native cards own their loading state");
-stillViewer.shadowRoot.querySelector(".close").click();
+assert.equal(stillViewer.shadowRoot.querySelector(".viewer").firstElementChild.config.camera_view, "auto", "explicit still mode is passed to HA");
+stillViewer._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
 stillViewer.remove();
 window.matchMedia = originalMatchMedia;
 
@@ -224,28 +222,50 @@ linkedGallery.setConfig({ cameras: ["camera.a", "camera.b"] });
 document.body.append(linkedGallery);
 linkedGallery.hass = { states };
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, true);
+assert.equal(linkedGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true);
 assert.equal(linkedGallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.b");
-assert.equal(window.location.search, "", "the one-time camera link is consumed");
-linkedGallery.shadowRoot.querySelector(".close").click();
+assert.equal(window.location.search, "?gallery_camera=camera.b", "the link stays until the popup finishes closing");
+linkedGallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(window.location.search, "", "the one-time camera link is consumed on close");
 linkedGallery.hass = { states };
-assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, false, "the link does not reopen after closing");
+assert.equal(linkedGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, false, "the link does not reopen after closing");
 await new Promise((resolve) => setTimeout(resolve, 0));
 linkedGallery.remove();
 history.pushState(null, "", "/dashboard-tablet/cameras?view=kept&gallery_camera=camera.a#position");
 document.body.append(linkedGallery);
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, true, "a cached gallery handles the next link");
+assert.equal(linkedGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true, "a cached gallery handles the next link");
 assert.equal(linkedGallery.shadowRoot.querySelector(".viewer").firstElementChild.config.entity, "camera.a");
-assert.equal(window.location.search, "?view=kept", "other query parameters remain");
+assert.equal(window.location.search, "?view=kept&gallery_camera=camera.a", "the link stays while the popup is open");
 assert.equal(window.location.hash, "#position", "the URL fragment remains");
-linkedGallery.shadowRoot.querySelector(".close").click();
+linkedGallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(window.location.search, "?view=kept", "other query parameters remain after close");
 await new Promise((resolve) => setTimeout(resolve, 0));
 linkedGallery.remove();
 history.pushState(null, "", "/dashboard-tablet/cameras?gallery_camera=camera.not_listed");
 document.body.append(linkedGallery);
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(linkedGallery.shadowRoot.querySelector("dialog").open, false, "an unlisted camera is ignored");
+assert.equal(linkedGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, false, "an unlisted camera is ignored");
 assert.equal(window.location.search, "?gallery_camera=camera.not_listed");
+linkedGallery.remove();
 
-console.log("camera gallery selection, popup loading, deep links, swipe navigation, viewer lifecycle, and close: ok");
+history.pushState(null, "", "/dashboard-mobile/cameras?gallery_camera=camera.a");
+const reconnectGallery = new CameraGalleryCard();
+reconnectGallery.setConfig({ cameras: ["camera.a"] });
+document.body.append(reconnectGallery);
+reconnectGallery.hass = { states };
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(reconnectGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true);
+reconnectGallery.remove();
+document.body.append(reconnectGallery);
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.equal(reconnectGallery.shadowRoot.querySelector("ha-adaptive-dialog").open, true, "a dashboard reconnect waits for the previous close");
+assert.equal(window.location.search, "?gallery_camera=camera.a", "a reconnect keeps the camera link until the viewer closes");
+reconnectGallery._requestClose();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(window.location.search, "");
+reconnectGallery.remove();
+
+console.log("camera gallery selection, native popup, deep links, swipe navigation, viewer lifecycle, and close: ok");

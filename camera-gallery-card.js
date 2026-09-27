@@ -82,59 +82,35 @@ function frameRatio(value) {
 }
 
 const styles = `
-  :host { display: block; min-width: 0; font-family: var(--ha-font-family-body, inherit); font-size: var(--ha-font-size-m, 14px); --gallery-dialog-radius: var(--ha-dialog-border-radius, var(--ha-border-radius-3xl, 24px)); --gallery-dialog-inline-inset: 16px; --gallery-dialog-block-inset: 16px; }
+  :host { display: block; min-width: 0; font-family: var(--ha-font-family-body, inherit); font-size: var(--ha-font-size-m, 14px); }
+  .gallery-shell { container-type: inline-size; }
   .gallery { display: grid; grid-template-columns: repeat(var(--gallery-columns), minmax(0, 1fr)); gap: var(--ha-space-2, 8px); }
   .gallery-group { grid-column: 1 / -1; margin: var(--ha-space-4, 16px) 0 0; font-size: var(--ha-font-size-l, 18px); font-weight: var(--ha-font-weight-medium, 500); line-height: 32px; }
   .gallery-group:first-child { margin-top: 0; }
   .tile { position: relative; min-width: 0; aspect-ratio: 16 / 9; overflow: hidden; border-radius: var(--ha-border-radius-lg, 16px); background: var(--card-background-color, #fff); }
   .tile > :first-child { display: block; width: 100%; height: 100%; pointer-events: none; }
   .tile button { position: absolute; inset: 0; width: 100%; border: 0; padding: 0; background: transparent; cursor: pointer; border-radius: inherit; }
-  .tile button:focus-visible, .side button:focus-visible, .close:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
+  .tile button:focus-visible, .side button:focus-visible, .action:focus-visible, .switcher:focus-visible { outline: 3px solid var(--primary-color); outline-offset: -3px; }
   .empty { display: grid; place-items: center; min-height: 120px; color: var(--secondary-text-color); }
-  dialog {
-    box-sizing: border-box;
-    position: fixed;
-    inset: auto;
-    top: calc(env(safe-area-inset-top, 0px) + var(--gallery-dialog-block-inset));
-    left: calc(env(safe-area-inset-left, 0px) + var(--gallery-dialog-inline-inset));
-    width: calc(100dvw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - var(--gallery-dialog-inline-inset) - var(--gallery-dialog-inline-inset));
-    height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--gallery-dialog-block-inset) - var(--gallery-dialog-block-inset));
-    max-width: none;
-    max-height: none;
-    margin: 0;
-    padding: 0;
-    border: 1px solid var(--divider-color, rgba(127,127,127,.25));
-    border-radius: var(--gallery-dialog-radius);
-    color: var(--primary-text-color);
-    background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff)));
-    box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 16px 48px rgba(0,0,0,.3)));
-    overflow: hidden;
-  }
-  dialog::backdrop { background: rgba(0,0,0,.72); }
-  .dialog-layout { display: flex; flex-direction: column; height: 100%; min-height: 0; }
-  .header { display: flex; align-items: center; gap: var(--ha-space-2, 8px); min-height: 64px; box-sizing: border-box; padding: 8px; border-bottom: 1px solid var(--divider-color, rgba(127,127,127,.25)); }
-  h2 { flex: 1; min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--ha-font-size-xl, 20px); font-weight: var(--ha-font-weight-medium, 500); line-height: 1.3; }
-  .close, .action, .switcher { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: var(--ha-button-border-radius, var(--ha-border-radius-md, 8px)); font: inherit; color: var(--primary-text-color); background: transparent; cursor: pointer; }
+  ha-adaptive-dialog { --dialog-content-padding: 0; --ha-bottom-sheet-height: calc(100dvh - max(var(--safe-area-inset-top, 0px), 48px)); --ha-bottom-sheet-max-height: var(--ha-bottom-sheet-height); }
+  h2 { min-width: 0; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: inherit; }
+  .action, .switcher { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; border: 0; border-radius: var(--ha-button-border-radius, var(--ha-border-radius-md, 8px)); font: inherit; color: var(--primary-color); background: transparent; cursor: pointer; }
   .action[hidden] { display: none; }
-  .close { width: 44px; flex: none; border-radius: var(--ha-border-radius-circle, 50%); }
-  .action, .switcher { padding: 0 12px; color: var(--primary-color); }
+  .action, .switcher { padding: 0 12px; }
   .switcher { display: none; }
-  .close:hover, .action:hover, .switcher:hover { background: var(--secondary-background-color, rgba(127,127,127,.12)); }
-  .content { position: relative; display: grid; grid-template-columns: minmax(0,1fr) clamp(280px, 20vw, 340px); flex: 1; min-height: 0; overflow: clip; }
+  .action:hover, .switcher:hover { background: var(--secondary-background-color, rgba(127,127,127,.12)); }
+  .content { position: relative; display: grid; grid-template-columns: minmax(0,1fr) clamp(280px, 20vw, 340px); height: calc(100dvh - 140px); min-height: 0; overflow: clip; }
   .stage { position: relative; display: grid; place-items: center; min-width: 0; min-height: 0; overflow: hidden; background: var(--primary-background-color, #fafafa); }
   .viewer { width: min(100%, 160vh); max-height: 100%; }
   .viewer > * { display: block; width: 100%; }
   .viewer[data-native] { width: 100%; height: 100%; max-height: none; }
   .viewer[data-native] > * { height: 100%; --ha-card-border-radius: 0px; }
-  .viewer-status { position: absolute; z-index: 1; top: 50%; left: 50%; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); box-sizing: border-box; padding: 10px 14px; transform: translate(-50%, -50%); border-radius: var(--ha-border-radius-lg, 16px); color: var(--primary-text-color); background: var(--ha-dialog-surface-background, var(--card-background-color, #fff)); box-shadow: var(--ha-box-shadow-m, 0 4px 16px rgba(0,0,0,.2)); pointer-events: none; white-space: nowrap; }
-  .viewer-status[hidden], .viewer-status ha-spinner[hidden] { display: none; }
+  .viewer[role="alert"] { padding: 24px; box-sizing: border-box; text-align: center; }
   .swipe-preview { position: absolute; inset: 0; display: grid; place-items: center; visibility: hidden; pointer-events: none; background: var(--primary-background-color, #fafafa); }
   .swipe-preview img { width: 100%; height: 100%; object-fit: cover; visibility: hidden; }
   .swipe-preview[data-fit="contain"] img { object-fit: contain; }
   .swipe-preview[data-fit="fill"] img { object-fit: fill; }
   .swipe-preview[data-image-ready] img { visibility: visible; }
-  .swipe-preview .name { position: absolute; padding: 8px 12px; border-radius: var(--ha-card-border-radius, 12px); color: var(--primary-text-color); background: var(--card-background-color, #fff); }
-  .swipe-preview[data-image-ready] .name { display: none; }
   .stage[data-swipe-active] .swipe-preview { visibility: visible; }
   .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: transform 220ms cubic-bezier(.2, 0, 0, 1); }
   .drawer-scrim { display: none; }
@@ -149,22 +125,21 @@ const styles = `
   .side .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .side .unavailable { color: var(--secondary-text-color); font-size: 12px; }
   @media (min-width: 601px) { .gallery { padding: var(--ha-space-2, 8px) var(--ha-space-4, 16px); } }
-  @media (min-width: 901px) { :host { --gallery-dialog-inline-inset: clamp(24px, 2.5vw, 48px); --gallery-dialog-block-inset: clamp(20px, 3vh, 32px); } }
-  @media (max-width: 850px) { .gallery { grid-template-columns: repeat(min(3, var(--gallery-columns)), minmax(0, 1fr)); } }
-  @media (max-width: 900px) {
+  @container (max-width: 850px) { .gallery { grid-template-columns: repeat(min(3, var(--gallery-columns)), minmax(0, 1fr)); } }
+  @media (max-width: 870px), (max-height: 500px) {
+    .content { height: calc(100dvh - max(var(--safe-area-inset-top, 0px), 48px) - 68px); }
     .content { display: block; }
     .stage { height: 100%; }
     .switcher { display: inline-flex; }
     .drawer-scrim { position: absolute; inset: 0; z-index: 1; background: rgba(0,0,0,.48); }
-    .side { position: absolute; inset: auto 0 0; z-index: 2; box-sizing: border-box; max-height: min(65%, 600px); border-left: 0; border-top: 1px solid var(--divider-color, rgba(127,127,127,.25)); border-radius: var(--gallery-dialog-radius) var(--gallery-dialog-radius) 0 0; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff))); box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 -8px 28px rgba(0,0,0,.22))); transform: translateY(100%); visibility: hidden; transition: transform .2s ease, visibility 0s .2s; }
-    dialog[data-drawer-open] .drawer-scrim { display: block; }
-    dialog[data-drawer-open] .side { transform: translateY(0); visibility: visible; transition: transform .2s ease; }
+    .side { position: absolute; inset: auto 0 0; z-index: 2; box-sizing: border-box; max-height: min(65%, 600px); border-left: 0; border-top: 1px solid var(--divider-color, rgba(127,127,127,.25)); border-radius: var(--ha-border-radius-2xl, 24px) var(--ha-border-radius-2xl, 24px) 0 0; padding-bottom: max(12px, env(safe-area-inset-bottom)); background: var(--ha-dialog-surface-background, var(--card-background-color, var(--ha-color-surface-default, #fff))); box-shadow: var(--dialog-box-shadow, var(--ha-box-shadow-l, 0 -8px 28px rgba(0,0,0,.22))); transform: translateY(100%); visibility: hidden; transition: transform .2s ease, visibility 0s .2s; }
+    ha-adaptive-dialog[data-drawer-open] .drawer-scrim { display: block; }
+    ha-adaptive-dialog[data-drawer-open] .side { transform: translateY(0); visibility: visible; transition: transform .2s ease; }
     .side h3 { margin: 0 12px 6px; }
   }
-  @media (max-width: 600px) { :host { --gallery-dialog-inline-inset: 4px; } }
-  @media (max-width: 720px) { .gallery { grid-template-columns: repeat(min(2, var(--gallery-columns)), minmax(0, 1fr)); } }
+  @container (max-width: 720px) { .gallery { grid-template-columns: repeat(min(2, var(--gallery-columns)), minmax(0, 1fr)); } }
   @media (max-width: 410px) { .action .label, .switcher .label { display: none; } .action, .switcher { width: 44px; padding: 0; } }
-  @media (prefers-reduced-motion: reduce) { .side, dialog[data-drawer-open] .side, .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .side, ha-adaptive-dialog[data-drawer-open] .side, .stage[data-swipe-animating] .viewer, .stage[data-swipe-animating] .swipe-preview { transition: none; } }
 `;
 
 class CameraGalleryCard extends HTMLElement {
@@ -173,39 +148,29 @@ class CameraGalleryCard extends HTMLElement {
     this.attachShadow({ mode: "open" });
     this.shadowRoot.innerHTML = `
       <style>${styles}</style>
-      <div class="gallery"></div>
-      <dialog aria-labelledby="camera-gallery-title">
-        <div class="dialog-layout">
-          <div class="header">
-            <button class="close" type="button" aria-label="Close camera viewer" autofocus>
-              <ha-icon icon="mdi:close" aria-hidden="true"></ha-icon>
-            </button>
-            <h2 id="camera-gallery-title"></h2>
-            <button class="action" type="button" hidden>
-              <ha-icon icon="mdi:open-in-new" aria-hidden="true"></ha-icon><span class="label"></span>
-            </button>
-            <button class="switcher" type="button" aria-label="Show cameras" aria-expanded="false" aria-controls="camera-gallery-list">
-              <ha-icon icon="mdi:view-list" aria-hidden="true"></ha-icon><span class="label">Cameras</span>
-            </button>
-          </div>
-          <div class="content">
-            <div class="stage"><div class="viewer"></div><div class="viewer-status" role="status" hidden><ha-spinner size="small" aria-hidden="true"></ha-spinner><span></span></div><div class="swipe-preview" aria-hidden="true"><img alt=""><span class="name"></span></div></div>
-            <div class="drawer-scrim"></div>
-            <aside class="side" id="camera-gallery-list" aria-label="Cameras">
-              <h3>Cameras</h3><div class="side-list"></div>
-            </aside>
-          </div>
+      <div class="gallery-shell"><div class="gallery"></div></div>
+      <ha-adaptive-dialog width="full" flexcontent aria-labelledby="camera-gallery-title">
+        <h2 slot="headerTitle" id="camera-gallery-title"></h2>
+        <button class="action" slot="headerActionItems" type="button" hidden>
+          <ha-icon icon="mdi:open-in-new" aria-hidden="true"></ha-icon><span class="label"></span>
+        </button>
+        <button class="switcher" slot="headerActionItems" type="button" aria-label="Show cameras" aria-expanded="false" aria-controls="camera-gallery-list">
+          <ha-icon icon="mdi:view-list" aria-hidden="true"></ha-icon><span class="label">Cameras</span>
+        </button>
+        <div class="content">
+          <div class="stage"><div class="viewer"></div><div class="swipe-preview" aria-hidden="true"><img alt=""></div></div>
+          <div class="drawer-scrim"></div>
+          <aside class="side" id="camera-gallery-list" aria-label="Cameras">
+            <h3>Cameras</h3><div class="side-list"></div>
+          </aside>
         </div>
-      </dialog>
+      </ha-adaptive-dialog>
     `;
     this._gallery = this.shadowRoot.querySelector(".gallery");
-    this._dialog = this.shadowRoot.querySelector("dialog");
+    this._dialog = this.shadowRoot.querySelector("ha-adaptive-dialog");
     this._title = this.shadowRoot.querySelector("h2");
     this._stage = this.shadowRoot.querySelector(".stage");
     this._viewer = this.shadowRoot.querySelector(".viewer");
-    this._viewerStatus = this.shadowRoot.querySelector(".viewer-status");
-    this._viewerSpinner = this._viewerStatus.querySelector("ha-spinner");
-    this._viewerLabel = this._viewerStatus.querySelector("span");
     this._swipePreview = this.shadowRoot.querySelector(".swipe-preview");
     this._swipeImage = this._swipePreview.querySelector("img");
     this._side = this.shadowRoot.querySelector(".side");
@@ -218,28 +183,25 @@ class CameraGalleryCard extends HTMLElement {
     this._entries = [];
     this._galleryRevision = 0;
     this._viewerRevision = 0;
+    this._connectionRevision = 0;
     this._swipeStart = null;
     this._swipeTimer = null;
     this._onResize = () => this._syncViewerSize();
     this._swipeImage.addEventListener("load", () => this._swipePreview.setAttribute("data-image-ready", ""));
     this._swipeImage.addEventListener("error", () => this._swipePreview.removeAttribute("data-image-ready"));
-    this.shadowRoot.querySelector(".close").addEventListener("click", () => this._requestClose());
-    this._dialog.addEventListener("cancel", (event) => {
-      event.preventDefault();
-      if (this._dialog.hasAttribute("data-drawer-open")) this._setDrawerOpen(false);
-      else this._requestClose();
-    });
-    this._dialog.addEventListener("click", (event) => {
-      if (event.target !== this._dialog) return;
-      const box = this._dialog.getBoundingClientRect();
-      if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) this._requestClose();
-    });
-    this._dialog.addEventListener("close", () => {
-      if (this._dialog.open) return;
+    this._dialog.addEventListener("closed", async () => {
+      await this._dialog.updateComplete;
+      this._resolveClose?.();
+      this._resolveClose = null;
+      this._closeDone = null;
+      const activeDialog = this._dialog.shadowRoot?.querySelector("ha-dialog, ha-bottom-sheet");
+      if (this._dialog.open && activeDialog?.open) return;
+      this._dialog.open = false;
       this._setDrawerOpen(false, false);
       this._teardownViewer();
       if (this.isConnected && this._opener?.isConnected) this._opener.focus({ preventScroll: true });
       this._opener = null;
+      if (this.isConnected && !this._preserveRequestedCamera) this._clearRequestedCamera();
     });
     this._action.addEventListener("click", () => {
       const entry = this._entries.find((item) => item.entity === this._selected);
@@ -261,7 +223,6 @@ class CameraGalleryCard extends HTMLElement {
     this._config = normalizeConfig(config);
     this._gallery.style.setProperty("--gallery-columns", this._config.columns);
     this._galleryRevision++;
-    if (this._dialog.open) this._requestClose();
     this._sync(true);
   }
 
@@ -271,6 +232,9 @@ class CameraGalleryCard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this._connectionRevision++;
+    this._preserveRequestedCamera = true;
+    this._requestedCamera = null;
     window.removeEventListener("resize", this._onResize);
     this._galleryRevision++;
     this._viewerRevision++;
@@ -308,22 +272,38 @@ class CameraGalleryCard extends HTMLElement {
   _sync(force = false) {
     if (!this._config || !this.isConnected) return;
     const entries = cameraEntries(this._config, this._hass?.states);
-    const signature = entries.map((item) => `${item.entity}:${item.group || ""}`).join("|");
+    const signature = entries.map((item) => `${item.entity}:${item.group || ""}:${this._name(item)}`).join("|");
     if (!force && signature === this._signature) return;
     this._entries = entries;
     this._signature = signature;
     if (this._dialog.open && !entries.some((item) => item.entity === this._selected)) this._requestClose();
-    this._openRequestedCamera();
     this._buildGallery();
   }
 
-  _openRequestedCamera() {
+  async _openRequestedCamera() {
     const url = new URL(window.location.href);
     const entity = url.searchParams.get("gallery_camera");
-    if (!this._entries.some((entry) => entry.entity === entity)) return;
-    url.searchParams.delete("gallery_camera");
-    history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+    if (this._requestedCamera || !this._entries.some((entry) => entry.entity === entity)) return;
+    this._requestedCamera = entity;
+    const revision = this._connectionRevision;
+    await customElements.whenDefined("ha-adaptive-dialog");
+    await this._dialog.updateComplete;
+    const nativeDialog = this._dialog.shadowRoot?.querySelector("ha-dialog, ha-bottom-sheet");
+    await nativeDialog?.updateComplete;
+    if (this._closeDone) await this._closeDone;
+    if (revision !== this._connectionRevision || !this.isConnected || !this._entries.some((entry) => entry.entity === entity)) return;
+    this._preserveRequestedCamera = false;
     this._open(entity);
+  }
+
+  _clearRequestedCamera() {
+    if (!this._requestedCamera) return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("gallery_camera") === this._requestedCamera) {
+      url.searchParams.delete("gallery_camera");
+      history.replaceState(history.state, "", url.pathname + url.search + url.hash);
+    }
+    this._requestedCamera = null;
   }
 
   async _buildGallery() {
@@ -368,6 +348,7 @@ class CameraGalleryCard extends HTMLElement {
         fragment.append(tile);
       }
       this._gallery.replaceChildren(fragment);
+      this._openRequestedCamera();
     } catch (error) {
       if (revision !== this._galleryRevision) return;
       this._gallery.textContent = "Cameras unavailable";
@@ -380,7 +361,7 @@ class CameraGalleryCard extends HTMLElement {
     this._opener = opener;
     if (!this._dialog.open) {
       this._teardownViewer();
-      this._dialog.showModal();
+      this._dialog.open = true;
     }
     this._select(entity);
   }
@@ -389,7 +370,7 @@ class CameraGalleryCard extends HTMLElement {
     if (this._stage.hasAttribute("data-swipe-animating")) return;
     this._resetSwipe();
     if (!this._dialog.open || this._dialog.hasAttribute("data-drawer-open") ||
-        !window.matchMedia("(max-width: 900px)").matches || event.touches.length !== 1 || this._entries.length < 2 ||
+        !window.matchMedia("(max-width: 870px), (max-height: 500px)").matches || event.touches.length !== 1 || this._entries.length < 2 ||
         this._entries.find((entry) => entry.entity === this._selected)?.viewer) return;
     if (event.composedPath().some((node) =>
       node.matches?.("button, a, input, select, textarea, [role='button'], [role='slider'], [contenteditable='true'], ha-icon-button, mwc-icon-button") ||
@@ -420,7 +401,6 @@ class CameraGalleryCard extends HTMLElement {
       start.adjacent = adjacent.entity;
       this._swipePreview.dataset.fit = this._viewerFitMode(adjacent);
       this._swipePreview.removeAttribute("data-image-ready");
-      this._swipePreview.querySelector(".name").textContent = this._name(adjacent);
       const picture = this._hass?.states?.[adjacent.entity]?.attributes?.entity_picture;
       if (picture) this._swipeImage.src = this._hass?.hassUrl?.(picture) || picture;
       else this._swipeImage.removeAttribute("src");
@@ -509,7 +489,7 @@ class CameraGalleryCard extends HTMLElement {
     this._resetSwipe();
     this._viewerRevision++;
     this._viewer.replaceChildren();
-    this._setViewerStatus();
+    this._viewer.removeAttribute("role");
     this._viewer.removeAttribute("data-native");
     this._activeCard = null;
     this._activeConfig = null;
@@ -518,8 +498,8 @@ class CameraGalleryCard extends HTMLElement {
   _requestClose() {
     if (!this._dialog.open) return;
     this._setDrawerOpen(false, false);
-    this._teardownViewer();
-    this._dialog.close();
+    this._closeDone = new Promise((resolve) => { this._resolveClose = resolve; });
+    this._dialog.open = false;
   }
 
   _select(entity, fromSwipe = false) {
@@ -597,14 +577,7 @@ class CameraGalleryCard extends HTMLElement {
   }
 
   _viewerFitMode(entry) {
-    return entry.fit_mode || this._config.fitMode || (window.matchMedia("(max-width: 900px)").matches ? "contain" : "cover");
-  }
-
-  _setViewerStatus(message, role = "status") {
-    this._viewerStatus.hidden = !message;
-    this._viewerStatus.setAttribute("role", role);
-    this._viewerSpinner.hidden = role === "alert";
-    this._viewerLabel.textContent = message || "";
+    return entry.fit_mode || this._config.fitMode || (window.matchMedia("(max-width: 870px), (max-height: 500px)").matches ? "contain" : "cover");
   }
 
   _syncViewerSize() {
@@ -623,12 +596,13 @@ class CameraGalleryCard extends HTMLElement {
     this._activeCard = null;
     this._activeConfig = null;
     this._viewer.replaceChildren();
-    this._setViewerStatus("Connecting video…");
+    this._viewer.removeAttribute("role");
     const entry = this._entries.find((item) => item.entity === this._selected);
     if (!entry) return;
     this._viewer.toggleAttribute("data-native", !entry.viewer);
     try {
       const helpers = await window.loadCardHelpers();
+      await new Promise((resolve) => window.requestAnimationFrame(resolve));
       if (revision !== this._viewerRevision || !this._dialog.open || this._selected !== entry.entity) return;
       const cardConfig = entry.viewer || {
         type: "picture-entity", entity: entry.entity, show_name: false, show_state: false,
@@ -636,19 +610,15 @@ class CameraGalleryCard extends HTMLElement {
         fit_mode: this._viewerFitMode(entry), tap_action: { action: "none" }
       };
       const card = helpers.createCardElement(cardConfig);
-      const waitForFrame = !entry.viewer && cardConfig.camera_view === "live";
-      if (waitForFrame) card.addEventListener("load", () => {
-        if (revision === this._viewerRevision && this._selected === entry.entity) this._setViewerStatus();
-      }, { once: true });
       if (this._hass) card.hass = this._hass;
       this._activeCard = card;
       this._activeConfig = entry.viewer ? null : cardConfig;
       this._viewer.replaceChildren(card);
-      if (!waitForFrame) this._setViewerStatus();
       if (fromSwipe) this._resetSwipe();
     } catch (error) {
       if (revision !== this._viewerRevision) return;
-      this._setViewerStatus("Camera viewer unavailable", "alert");
+      this._viewer.textContent = "Camera viewer unavailable";
+      this._viewer.setAttribute("role", "alert");
       if (fromSwipe) this._resetSwipe();
       console.error("camera-gallery-card: unable to create camera viewer", error);
     }
