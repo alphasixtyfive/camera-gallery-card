@@ -43,7 +43,7 @@ For a phone dashboard with headings, put native heading and grid cards in a nati
 
 The enlarged viewer is a native live `picture-entity` card by default; there is no separate popup card to configure. Set `viewer_view: auto` for a still image on one camera, or pass a full `viewer:` card config for a camera that needs a different viewer. The viewer fills its stage on wider screens and shows the whole frame on phones; `fit_mode: cover`, `contain`, or `fill` overrides that behavior globally or per camera. Previews keep their own `fit_mode` from the native picture entity config.
 
-The popup uses `ha-adaptive-dialog` for its close button, motion, and phone swipe-down dismissal. You can swipe horizontally across the standard viewer to change cameras, or use the camera list. The media stage stays fixed while that list scrolls.
+The popup uses `ha-adaptive-dialog` for its close button, motion, and phone swipe-down dismissal. Use the Cameras button to switch cameras on a phone. The media stage stays fixed while the camera list scrolls.
 
 To open the same popup from Home without changing views, wrap Home's existing native preview card and point it at the Cameras view. Keep the desired camera tiles on `more-info`; other native actions, including intercom navigation, pass through unchanged:
 
